@@ -1,0 +1,256 @@
+.faculty-container {
+  display: flex;
+  height: 100vh; 
+  background-color: #4a4a4a;
+  min-height: 100vh;
+}
+
+.faculty-page {
+  flex: 1;
+  padding: 30px;
+  margin-left: 250px;
+  background-color: #fff;
+}
+
+.faculty-header h1 {
+  font-size: 28px;
+  margin: 0 0 20px 0;
+  color: #333;
+  font-weight: bold;
+}
+
+.faculty-content {
+  background-color: #fff;
+  border-radius: 8px;
+  border: 0.5px solid #4a4a4a;
+  padding: 24px;
+  min-height: calc(100vh - 120px);
+}
+
+.faculty-filters {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #333;
+  padding: 10px;
+  background-color: #ffffff;
+  gap: 20px;
+  flex-wrap: wrap;
+  border-radius: 2px;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  background-color: #d3d3d3;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+}
+
+.filter-btn:hover {
+  background-color: #c0c0c0;
+}
+
+.search-promote-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.promote-add-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.add-faculty-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  background-color: #d3d3d3;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+}
+
+.add-faculty-btn:hover {
+  background-color: #c0c0c0;
+}
+
+.search-input {
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 250px;
+  background-color: #fff;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #fcc;
+}
+
+.loading-message {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+}
+
+.faculty-table-section {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.faculty-table-placeholder {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+}
+
+.faculty-table-placeholder p {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.faculty-table {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.faculty-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.faculty-table th,
+.faculty-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.faculty-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+  position: sticky;
+  top: 0;
+}
+
+.faculty-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+  color: #fff;
+}
+
+.view-btn {
+  background-color: #007bff;
+}
+
+.view-btn:hover {
+  background-color: #0056b3;
+}
+
+.update-btn {
+  background-color: #28a745;
+}
+
+.update-btn:hover {
+  background-color: #218838;
+}
+
+.delete-btn {
+  background-color: #dc3545;
+}
+
+.delete-btn:hover {
+  background-color: #c82333;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.status-active {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-inactive {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-retired {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+@media (max-width: 768px) {
+  .faculty-filters {
+    flex-direction: column;
+  }
+
+  .search-promote-section {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .promote-add-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .add-faculty-btn {
+    flex: 1;
+  }
+}

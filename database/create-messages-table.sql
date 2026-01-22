@@ -1,0 +1,26 @@
+-- Create messages table for admin communication with students, staff, and others
+CREATE TABLE IF NOT EXISTS messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  sender_id VARCHAR(100) NOT NULL,
+  sender_name VARCHAR(255) NOT NULL,
+  sender_type ENUM('student', 'staff', 'transport_manager', 'other') NOT NULL,
+  recipient_id VARCHAR(100) NOT NULL DEFAULT 'admin',
+  recipient_name VARCHAR(255) NOT NULL DEFAULT 'Admin',
+  recipient_type ENUM('admin', 'student', 'staff', 'transport_manager') NOT NULL DEFAULT 'admin',
+  subject VARCHAR(255) NULL,
+  message TEXT NOT NULL,
+  reply_to INT NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  is_replied BOOLEAN DEFAULT FALSE,
+  attachment_path VARCHAR(255) NULL,
+  attachment_type VARCHAR(100) NULL,
+  attachment_name VARCHAR(255) NULL,
+  attachment_size BIGINT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (reply_to) REFERENCES messages(id) ON DELETE SET NULL,
+  INDEX idx_sender (sender_id, sender_type),
+  INDEX idx_recipient (recipient_id, recipient_type),
+  INDEX idx_read (is_read),
+  INDEX idx_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

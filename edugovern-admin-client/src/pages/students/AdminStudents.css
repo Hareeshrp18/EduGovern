@@ -1,0 +1,408 @@
+.students-container {
+  display: flex;
+  height: 100vh; 
+  background-color: #4a4a4a;
+  min-height: 100vh;
+}
+
+.students-page {
+  flex: 1;
+  padding: 30px;
+  margin-left: 250px;
+  background-color: #fff;
+}
+
+.students-header h1 {
+  font-size: 28px;
+  margin: 0 0 20px 0;
+  color: #333;
+  font-weight: bold;
+}
+
+.students-content {
+  background-color: #fff;
+  border-radius: 8px;
+  border: 0.5px solid #4a4a4a;
+  padding: 24px;
+  min-height: calc(100vh - 120px);
+}
+
+.students-filters {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #333;
+  padding: 10px;
+  background-color: #ffffff;
+  gap: 20px;
+  flex-wrap: wrap;
+  border-radius: 2px;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  background-color: #d3d3d3;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+}
+
+.filter-btn:hover {
+  background-color: #c0c0c0;
+}
+
+.search-promote-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.promote-add-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.promote-btn,
+.add-student-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  border: none;
+  background-color: #d3d3d3;
+  color: #333;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+}
+
+.promote-btn:hover:not(:disabled),
+.add-student-btn:hover {
+  background-color: #c0c0c0;
+}
+
+.promote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #e0e0e0;
+  color: #999;
+}
+
+.promote-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #e0e0e0;
+  border-color: #d0d0d0;
+}
+
+.search-input {
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 250px;
+  background-color: #fff;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border: 1px solid #fcc;
+}
+
+.loading-message {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+}
+
+.students-table-section {
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.students-table-placeholder {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
+}
+
+.students-table-placeholder p {
+  margin: 0;
+  color: #555;
+  font-size: 14px;
+}
+
+.students-table {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.students-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.students-table th,
+.students-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.students-table th {
+  background-color: #f5f5f5;
+  font-weight: 600;
+  color: #333;
+  position: sticky;
+  top: 0;
+}
+
+.students-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: 500;
+  color: #fff;
+}
+
+.view-btn {
+  background-color: #007bff;
+}
+
+.view-btn:hover {
+  background-color: #0056b3;
+}
+
+.update-btn {
+  background-color: #28a745;
+}
+
+.update-btn:hover {
+  background-color: #218838;
+}
+
+.promote-btn-action {
+  background-color: #17a2b8;
+}
+
+.promote-btn-action:hover {
+  background-color: #138496;
+}
+
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+}
+
+.status-active {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-inactive {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-graduated {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.status-transferred {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+@media (max-width: 768px) {
+  .students-filters {
+    flex-direction: column;
+  }
+
+  .search-promote-section {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .promote-add-buttons {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .promote-btn,
+  .add-student-btn {
+    flex: 1;
+  }
+}
+
+/* Promotion Confirmation Modal */
+.promote-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.promote-confirm-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 450px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.promote-confirm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.promote-confirm-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.promote-confirm-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #999;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.3s;
+}
+
+.promote-confirm-header .close-btn:hover {
+  color: #333;
+}
+
+.promote-confirm-body {
+  padding: 24px;
+}
+
+.promote-confirm-body p {
+  margin: 0;
+  color: #555;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.promote-confirm-body strong {
+  color: #333;
+  font-weight: 600;
+}
+
+.promote-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.promote-cancel-btn,
+.promote-confirm-btn {
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
+}
+
+.promote-cancel-btn {
+  background-color: #e0e0e0;
+  color: #333;
+}
+
+.promote-cancel-btn:hover {
+  background-color: #d0d0d0;
+}
+
+.promote-confirm-btn {
+  background-color: #28a745;
+  color: #fff;
+}
+
+.promote-confirm-btn:hover:not(:disabled) {
+  background-color: #218838;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(40, 167, 69, 0.3);
+}
+
+.promote-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

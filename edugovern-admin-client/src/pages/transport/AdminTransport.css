@@ -397,6 +397,14 @@
   color: #fff;
 }
 
+.view-btn {
+  background-color: #007bff;
+}
+
+.view-btn:hover {
+  background-color: #0056b3;
+}
+
 .update-btn {
   background-color: #28a745;
 }

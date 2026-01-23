@@ -60,6 +60,24 @@ const AdminTransport = () => {
       );
     }
 
+    // Sort by bus number in ascending order
+    filtered.sort((a, b) => {
+      const busNumA = a.bus_number || '';
+      const busNumB = b.bus_number || '';
+      
+      // Extract numeric part if exists, otherwise use string comparison
+      const numA = parseInt(busNumA.match(/\d+/)?.[0] || '0');
+      const numB = parseInt(busNumB.match(/\d+/)?.[0] || '0');
+      
+      // If both have numbers, compare numerically
+      if (numA !== 0 && numB !== 0) {
+        return numA - numB;
+      }
+      
+      // Otherwise, compare as strings
+      return busNumA.localeCompare(busNumB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     setFilteredBuses(filtered);
   }, [buses, searchTerm, selectedStatus]);
 
@@ -593,10 +611,13 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
   const [formData, setFormData] = useState({
     bus_number: '',
     registration_number: '',
+    chassis_number: '',
+    engine_number: '',
     driver_name: '',
     driver_contact: '',
     route_name: '',
     capacity: '',
+    vehicle_weight: '',
     insurance_expiry: '',
     fc_expiry: '',
     permit_expiry: '',
@@ -610,10 +631,13 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
       setFormData({
         bus_number: bus.bus_number || '',
         registration_number: bus.registration_number || '',
+        chassis_number: bus.chassis_number || '',
+        engine_number: bus.engine_number || '',
         driver_name: bus.driver_name || '',
         driver_contact: bus.driver_contact || '',
         route_name: bus.route_name || '',
         capacity: bus.capacity || '',
+        vehicle_weight: bus.vehicle_weight || '',
         insurance_expiry: bus.insurance_expiry ? bus.insurance_expiry.split('T')[0] : '',
         fc_expiry: bus.fc_expiry ? bus.fc_expiry.split('T')[0] : '',
         permit_expiry: bus.permit_expiry ? bus.permit_expiry.split('T')[0] : '',
@@ -705,6 +729,28 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
               </div>
 
               <div className="form-group">
+                <label htmlFor="chassis_number">Chassis Number</label>
+                <input
+                  type="text"
+                  id="chassis_number"
+                  name="chassis_number"
+                  value={formData.chassis_number}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="engine_number">Engine Number</label>
+                <input
+                  type="text"
+                  id="engine_number"
+                  name="engine_number"
+                  value={formData.engine_number}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div className="form-group">
                 <label htmlFor="driver_name">Driver Name</label>
                 <input
                   type="text"
@@ -748,6 +794,19 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
                   value={formData.capacity}
                   onChange={handleChange}
                   min="1"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="vehicle_weight">Vehicle Weight (kg)</label>
+                <input
+                  type="number"
+                  id="vehicle_weight"
+                  name="vehicle_weight"
+                  value={formData.vehicle_weight}
+                  onChange={handleChange}
+                  min="0"
+                  step="0.01"
                 />
               </div>
 
@@ -871,6 +930,14 @@ const BusDetailsModal = ({
                 <span>{bus.registration_number}</span>
               </div>
               <div className="info-item">
+                <label>Chassis Number:</label>
+                <span>{bus.chassis_number || '-'}</span>
+              </div>
+              <div className="info-item">
+                <label>Engine Number:</label>
+                <span>{bus.engine_number || '-'}</span>
+              </div>
+              <div className="info-item">
                 <label>Driver Name:</label>
                 <span>{bus.driver_name || '-'}</span>
               </div>
@@ -885,6 +952,10 @@ const BusDetailsModal = ({
               <div className="info-item">
                 <label>Capacity:</label>
                 <span>{bus.capacity || '-'}</span>
+              </div>
+              <div className="info-item">
+                <label>Vehicle Weight:</label>
+                <span>{bus.vehicle_weight ? `${bus.vehicle_weight} kg` : '-'}</span>
               </div>
               <div className="info-item">
                 <label>Insurance Expiry:</label>

@@ -63,10 +63,13 @@ export const create = async (busData) => {
     const {
       bus_number,
       registration_number,
+      chassis_number,
+      engine_number,
       driver_name,
       driver_contact,
       route_name,
       capacity,
+      vehicle_weight,
       insurance_expiry,
       fc_expiry,
       permit_expiry,
@@ -75,16 +78,19 @@ export const create = async (busData) => {
 
     const [result] = await pool.execute(
       `INSERT INTO buses (
-        bus_number, registration_number, driver_name, driver_contact,
-        route_name, capacity, insurance_expiry, fc_expiry, permit_expiry, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        bus_number, registration_number, chassis_number, engine_number, driver_name, driver_contact,
+        route_name, capacity, vehicle_weight, insurance_expiry, fc_expiry, permit_expiry, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         bus_number,
         registration_number,
+        chassis_number || null,
+        engine_number || null,
         driver_name || null,
         driver_contact || null,
         route_name || null,
         capacity || null,
+        vehicle_weight || null,
         insurance_expiry || null,
         fc_expiry || null,
         permit_expiry || null,
@@ -112,10 +118,13 @@ export const update = async (id, busData) => {
     const {
       bus_number,
       registration_number,
+      chassis_number,
+      engine_number,
       driver_name,
       driver_contact,
       route_name,
       capacity,
+      vehicle_weight,
       insurance_expiry,
       fc_expiry,
       permit_expiry,
@@ -124,17 +133,20 @@ export const update = async (id, busData) => {
 
     await pool.execute(
       `UPDATE buses SET
-        bus_number = ?, registration_number = ?, driver_name = ?, driver_contact = ?,
-        route_name = ?, capacity = ?, insurance_expiry = ?, fc_expiry = ?,
-        permit_expiry = ?, status = ?
+        bus_number = ?, registration_number = ?, chassis_number = ?, engine_number = ?,
+        driver_name = ?, driver_contact = ?, route_name = ?, capacity = ?, vehicle_weight = ?,
+        insurance_expiry = ?, fc_expiry = ?, permit_expiry = ?, status = ?
       WHERE id = ?`,
       [
         bus_number,
         registration_number,
+        chassis_number || null,
+        engine_number || null,
         driver_name || null,
         driver_contact || null,
         route_name || null,
         capacity || null,
+        vehicle_weight || null,
         insurance_expiry || null,
         fc_expiry || null,
         permit_expiry || null,

@@ -1,6 +1,7 @@
 import * as studentModel from '../students/student.model.js';
 import * as facultyModel from '../faculty/faculty.model.js';
 import * as busModel from '../transport/bus.model.js';
+import * as maintenanceService from '../transport/maintenance.service.js';
 
 /**
  * Report Service - Business logic for report generation
@@ -24,6 +25,38 @@ export const generateStudentReport = async (filters = {}) => {
     }
     if (filters.status) {
       students = students.filter(s => s.status === filters.status);
+    }
+    
+    // Apply date range filter
+    if (filters.fromDate || filters.toDate) {
+      students = students.filter(s => {
+        // Use admission_date if available, otherwise use created_at
+        const dateToCheck = s.admission_date || s.created_at;
+        if (!dateToCheck) return false;
+        
+        // Extract date part only (YYYY-MM-DD) to avoid timezone issues
+        let recordDateStr;
+        if (typeof dateToCheck === 'string') {
+          recordDateStr = dateToCheck.split('T')[0].substring(0, 10);
+        } else {
+          const d = new Date(dateToCheck);
+          recordDateStr = d.toISOString().split('T')[0];
+        }
+        
+        // Compare as date strings (YYYY-MM-DD)
+        if (filters.fromDate && filters.toDate) {
+          const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+          const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+          return recordDateStr >= fromDateStr && recordDateStr <= toDateStr;
+        } else if (filters.fromDate) {
+          const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+          return recordDateStr >= fromDateStr;
+        } else if (filters.toDate) {
+          const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+          return recordDateStr <= toDateStr;
+        }
+        return true;
+      });
     }
 
     // Calculate statistics
@@ -91,6 +124,38 @@ export const generateStaffReport = async (filters = {}) => {
     }
     if (filters.section) {
       faculty = faculty.filter(f => f.section === filters.section);
+    }
+    
+    // Apply date range filter
+    if (filters.fromDate || filters.toDate) {
+      faculty = faculty.filter(f => {
+        // Use joining_date if available, otherwise use created_at
+        const dateToCheck = f.joining_date || f.created_at;
+        if (!dateToCheck) return false;
+        
+        // Extract date part only (YYYY-MM-DD) to avoid timezone issues
+        let recordDateStr;
+        if (typeof dateToCheck === 'string') {
+          recordDateStr = dateToCheck.split('T')[0].substring(0, 10);
+        } else {
+          const d = new Date(dateToCheck);
+          recordDateStr = d.toISOString().split('T')[0];
+        }
+        
+        // Compare as date strings (YYYY-MM-DD)
+        if (filters.fromDate && filters.toDate) {
+          const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+          const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+          return recordDateStr >= fromDateStr && recordDateStr <= toDateStr;
+        } else if (filters.fromDate) {
+          const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+          return recordDateStr >= fromDateStr;
+        } else if (filters.toDate) {
+          const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+          return recordDateStr <= toDateStr;
+        }
+        return true;
+      });
     }
 
     // Calculate statistics
@@ -161,6 +226,37 @@ export const generateTransportReport = async (filters = {}) => {
     if (filters.status) {
       buses = buses.filter(b => b.status === filters.status);
     }
+    
+    // Apply date range filter for buses (by created_at)
+    if (filters.fromDate || filters.toDate) {
+      buses = buses.filter(b => {
+        const dateToCheck = b.created_at;
+        if (!dateToCheck) return false;
+        
+        // Extract date part only (YYYY-MM-DD) to avoid timezone issues
+        let recordDateStr;
+        if (typeof dateToCheck === 'string') {
+          recordDateStr = dateToCheck.split('T')[0].substring(0, 10);
+        } else {
+          const d = new Date(dateToCheck);
+          recordDateStr = d.toISOString().split('T')[0];
+        }
+        
+        // Compare as date strings (YYYY-MM-DD)
+        if (filters.fromDate && filters.toDate) {
+          const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+          const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+          return recordDateStr >= fromDateStr && recordDateStr <= toDateStr;
+        } else if (filters.fromDate) {
+          const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+          return recordDateStr >= fromDateStr;
+        } else if (filters.toDate) {
+          const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+          return recordDateStr <= toDateStr;
+        }
+        return true;
+      });
+    }
 
     // Calculate statistics
     const totalBuses = buses.length;
@@ -227,7 +323,148 @@ export const generateTransportReport = async (filters = {}) => {
     // Maintenance alerts
     const maintenanceAlerts = await busModel.findBusesWithExpiringDocuments(2);
 
-    return {
+    // Fetch maintenance records for each bus
+    const busesWithMaintenance = await Promise.all(
+      buses.map(async (bus) => {
+        try {
+          console.log(`[REPORT] Fetching maintenance for bus ID: ${bus.id}, Bus Number: ${bus.bus_number}`);
+          
+          // Try fetching by bus.id first
+          let maintenanceRecords = await maintenanceService.getMaintenanceByBusId(bus.id);
+          
+          // If no records found, try to find by bus_number as fallback (in case ID mismatch)
+          if (!maintenanceRecords || maintenanceRecords.length === 0) {
+            console.log(`[REPORT] No records found for bus.id=${bus.id}, checking if bus_id in maintenance table matches...`);
+            // We'll keep the original query but log the issue
+          }
+          
+          console.log(`[REPORT] Bus ${bus.id} (${bus.bus_number}): Raw maintenance data:`, {
+            type: typeof maintenanceRecords,
+            isArray: Array.isArray(maintenanceRecords),
+            length: maintenanceRecords ? maintenanceRecords.length : 0,
+            records: maintenanceRecords ? maintenanceRecords.slice(0, 2) : null // Show first 2 records for debugging
+          });
+          
+          // Ensure maintenanceRecords is an array
+          let records = Array.isArray(maintenanceRecords) ? maintenanceRecords : [];
+          
+          // Filter maintenance records by date range if provided
+          if (filters.fromDate || filters.toDate) {
+            records = records.filter(record => {
+              const maintenanceDate = record.maintenance_date || record.created_at;
+              if (!maintenanceDate) return false;
+              
+              // Extract date part only (YYYY-MM-DD) to avoid timezone issues
+              // Handle both date strings and Date objects
+              let recordDateStr;
+              if (typeof maintenanceDate === 'string') {
+                // If it's a string, extract the date part (YYYY-MM-DD)
+                recordDateStr = maintenanceDate.split('T')[0].substring(0, 10);
+              } else {
+                // If it's a Date object, format it as YYYY-MM-DD
+                const d = new Date(maintenanceDate);
+                recordDateStr = d.toISOString().split('T')[0];
+              }
+              
+              // Compare as date strings (YYYY-MM-DD) to avoid timezone issues
+              if (filters.fromDate && filters.toDate) {
+                const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+                const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+                return recordDateStr >= fromDateStr && recordDateStr <= toDateStr;
+              } else if (filters.fromDate) {
+                const fromDateStr = filters.fromDate.split('T')[0].substring(0, 10);
+                return recordDateStr >= fromDateStr;
+              } else if (filters.toDate) {
+                const toDateStr = filters.toDate.split('T')[0].substring(0, 10);
+                return recordDateStr <= toDateStr;
+              }
+              return true;
+            });
+          }
+          
+          const totalCost = records.reduce((sum, record) => {
+            const cost = parseFloat(record.cost) || 0;
+            return sum + cost;
+          }, 0);
+          
+          const busWithMaintenance = {
+            ...bus,
+            maintenanceRecords: records,
+            maintenanceCount: records.length,
+            totalMaintenanceCost: totalCost,
+            lastMaintenanceDate: records.length > 0
+              ? records[0].maintenance_date
+              : null,
+            nextMaintenanceDate: records.length > 0
+              ? (records.find(r => r.next_maintenance_date)?.next_maintenance_date || null)
+              : null
+          };
+          
+          console.log(`[REPORT] Bus ${bus.id} final data:`, {
+            bus_number: busWithMaintenance.bus_number,
+            maintenanceCount: busWithMaintenance.maintenanceCount,
+            totalMaintenanceCost: busWithMaintenance.totalMaintenanceCost,
+            hasRecords: busWithMaintenance.maintenanceRecords.length > 0
+          });
+          
+          return busWithMaintenance;
+        } catch (error) {
+          // Log error but continue without maintenance data
+          console.error(`[REPORT] Error fetching maintenance for bus ${bus.id} (${bus.bus_number}):`, error.message);
+          console.error(`[REPORT] Error stack:`, error.stack);
+          return {
+            ...bus,
+            maintenanceRecords: [],
+            maintenanceCount: 0,
+            totalMaintenanceCost: 0,
+            lastMaintenanceDate: null,
+            nextMaintenanceDate: null
+          };
+        }
+      })
+    );
+
+    // Calculate maintenance statistics
+    const totalMaintenanceRecords = busesWithMaintenance.reduce(
+      (sum, bus) => sum + bus.maintenanceCount, 0
+    );
+    const totalMaintenanceCost = busesWithMaintenance.reduce(
+      (sum, bus) => sum + bus.totalMaintenanceCost, 0
+    );
+
+    // Sort buses by bus number in ascending order
+    busesWithMaintenance.sort((a, b) => {
+      const busNumA = a.bus_number || '';
+      const busNumB = b.bus_number || '';
+      
+      // Extract numeric part if exists, otherwise use string comparison
+      const numA = parseInt(busNumA.match(/\d+/)?.[0] || '0');
+      const numB = parseInt(busNumB.match(/\d+/)?.[0] || '0');
+      
+      // If both have numbers, compare numerically
+      if (numA !== 0 && numB !== 0) {
+        return numA - numB;
+      }
+      
+      // Otherwise, compare as strings with numeric awareness
+      return busNumA.localeCompare(busNumB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    // Debug: Log final report data structure
+    console.log(`[REPORT] Final report summary:`, {
+      totalBuses: busesWithMaintenance.length,
+      totalMaintenanceRecords,
+      totalMaintenanceCost,
+      busesWithMaintenance: busesWithMaintenance.map(b => ({
+        id: b.id,
+        bus_number: b.bus_number,
+        maintenanceCount: b.maintenanceCount,
+        totalMaintenanceCost: b.totalMaintenanceCost,
+        recordsCount: b.maintenanceRecords ? b.maintenanceRecords.length : 0
+      }))
+    });
+
+    const reportData = {
       type: 'transport',
       generatedAt: new Date(),
       filters,
@@ -237,6 +474,8 @@ export const generateTransportReport = async (filters = {}) => {
         inactive: inactiveBuses,
         underMaintenance: maintenanceBuses,
         totalCapacity,
+        totalMaintenanceRecords,
+        totalMaintenanceCost: totalMaintenanceCost.toFixed(2),
         expiringDocuments: {
           insurance: expiringDocuments.insurance.length,
           fc: expiringDocuments.fc.length,
@@ -252,8 +491,24 @@ export const generateTransportReport = async (filters = {}) => {
       maintenanceAlerts,
       expiringDetails: expiringDocuments,
       expiredDetails: expiredDocuments,
-      data: buses
+      data: busesWithMaintenance
     };
+
+    // Verify maintenance records are included in response
+    if (reportData.data && reportData.data.length > 0) {
+      const firstBus = reportData.data[0];
+      console.log(`[REPORT] Sample bus data from report:`, {
+        id: firstBus.id,
+        bus_number: firstBus.bus_number,
+        maintenanceCount: firstBus.maintenanceCount,
+        totalMaintenanceCost: firstBus.totalMaintenanceCost,
+        maintenanceRecords: firstBus.maintenanceRecords ? firstBus.maintenanceRecords.length : 0,
+        hasRecordsProperty: 'maintenanceRecords' in firstBus,
+        firstRecord: firstBus.maintenanceRecords && firstBus.maintenanceRecords.length > 0 ? firstBus.maintenanceRecords[0] : null
+      });
+    }
+
+    return reportData;
   } catch (error) {
     throw new Error(`Failed to generate transport report: ${error.message}`);
   }

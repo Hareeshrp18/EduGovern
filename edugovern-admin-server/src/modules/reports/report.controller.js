@@ -71,12 +71,23 @@ export const getTransportReport = async (req, res) => {
 
     const report = await generateTransportReport(filters);
 
+    // Debug: Log maintenance data in response
+    if (report && report.data) {
+      console.log('Transport Report - Total buses:', report.data.length);
+      report.data.forEach((bus, idx) => {
+        if (bus.maintenanceRecords && bus.maintenanceRecords.length > 0) {
+          console.log(`Bus ${idx + 1} (${bus.bus_number}): ${bus.maintenanceRecords.length} maintenance records`);
+        }
+      });
+    }
+
     res.status(200).json({
       success: true,
       message: 'Transport report generated successfully',
       data: report
     });
   } catch (error) {
+    console.error('Error generating transport report:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Failed to generate transport report'

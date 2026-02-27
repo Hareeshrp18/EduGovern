@@ -1,62 +1,87 @@
 import { useState, useEffect } from 'react';
 import './FacultyForm.css';
+import { normalizeClassForCompare } from '../../utils/classCompare.js';
 
 /**
  * Faculty Form Component
  * Used for both adding and editing faculty
  */
-const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly = false }) => {
-  const [formData, setFormData] = useState({
-    name: '',
-    date_of_birth: '',
-    designation: '',
-    experience: '',
-    contact: '',
-    email: '',
-    address: '',
-    salary: '',
-    class: '',
-    section: '',
-    qualification: '',
-    joining_date: '',
-    status: 'Active'
-  });
+const formatDateForInput = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') return d.slice(0, 10);
+  if (d instanceof Date) return d.toISOString().slice(0, 10);
+  return '';
+};
 
+const emptyFormData = {
+  staff_name: '',
+  date_of_birth: '',
+  designation: '',
+  experience: '',
+  contact: '',
+  email: '',
+  address: '',
+  salary: '',
+  class: '',
+  section: '',
+  qualification: '',
+  joining_date: '',
+  status: 'Active'
+};
+
+const facultyToFormData = (f) => {
+  if (!f) return emptyFormData;
+  return {
+    staff_name: f.staff_name || f.name || '',
+    date_of_birth: formatDateForInput(f.date_of_birth),
+    designation: f.designation || '',
+    experience: f.experience != null ? String(f.experience) : '',
+    contact: f.contact || '',
+    email: f.email || '',
+    address: f.address || '',
+    salary: f.salary != null ? String(f.salary) : '',
+    class: f.class || '',
+    section: f.section || '',
+    qualification: f.qualification || '',
+    joining_date: formatDateForInput(f.joining_date),
+    status: f.status || 'Active'
+  };
+};
+
+const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly = false, classes = [], sections = [] }) => {
+  const isViewOrEdit = !!(isEditing || viewOnly);
+  const initialData = isViewOrEdit && faculty ? facultyToFormData(faculty) : emptyFormData;
+  const initialPhoto = (isViewOrEdit && faculty && faculty.photo) ? faculty.photo : null;
+
+  const [formData, setFormData] = useState(initialData);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
-  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(initialPhoto);
 
-  // Populate form if editing or viewing
+  const sectionOptions = sections.filter((s) =>
+    normalizeClassForCompare(s.class_name || '') === normalizeClassForCompare(formData.class)
+  );
+
+  // Keep form in sync when faculty prop changes; resolve class so "10th" matches dropdown "10"
   useEffect(() => {
-    if (faculty && (isEditing || viewOnly)) {
-      setFormData({
-        name: faculty.name || '',
-        date_of_birth: faculty.date_of_birth || '',
-        designation: faculty.designation || '',
-        experience: faculty.experience || '',
-        contact: faculty.contact || '',
-        email: faculty.email || '',
-        address: faculty.address || '',
-        salary: faculty.salary || '',
-        class: faculty.class || '',
-        section: faculty.section || '',
-        qualification: faculty.qualification || '',
-        joining_date: faculty.joining_date || '',
-        status: faculty.status || 'Active'
-      });
-      if (faculty.photo) {
-        setPhotoPreview(faculty.photo);
-      }
-    }
-  }, [faculty, isEditing, viewOnly]);
+    if (!faculty || !isViewOrEdit) return;
+    const data = facultyToFormData(faculty);
+    const facultyClass = data.class || '';
+    const resolvedClass = classes.length && facultyClass
+      ? (classes.find(c => normalizeClassForCompare(c.name) === normalizeClassForCompare(facultyClass))?.name ?? facultyClass)
+      : facultyClass;
+    setFormData({ ...data, class: resolvedClass });
+    setPhotoPreview(faculty.photo || null);
+    setErrors({});
+  }, [faculty, isEditing, viewOnly, classes]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error for this field
+    setFormData(prev => {
+      const next = { ...prev, [name]: value };
+      if (name === 'class') next.section = '';
+      return next;
+    });
     if (errors[name]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -83,8 +108,8 @@ const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly =
   const validate = () => {
     const newErrors = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
+    if (!formData.staff_name.trim()) {
+      newErrors.staff_name = 'Name is required';
     }
 
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
@@ -109,15 +134,15 @@ const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly =
 
     setLoading(true);
     try {
-      // Prepare data for submission
-      const submitData = { ...formData };
-      // In production, upload photo file to server and get URL
-      // For now, we'll just send the data
-      if (photoPreview && formData.photoFile) {
-        // In production: upload file and get URL
-        submitData.photo = photoPreview; // Temporary, should be server URL
-      } else if (photoPreview && !formData.photoFile) {
-        // Existing photo (not changed)
+      // Build payload: ensure staff_name is sent, omit photoFile (not JSON-serializable)
+      const { photoFile, ...rest } = formData;
+      const submitData = {
+        ...rest,
+        staff_name: (formData.staff_name || '').trim()
+      };
+      if (photoPreview && photoFile) {
+        submitData.photo = photoPreview;
+      } else if (photoPreview && !photoFile) {
         submitData.photo = photoPreview;
       }
       await onSubmit(submitData);
@@ -141,7 +166,6 @@ const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly =
             <div className="error-message">{errors.submit}</div>
           )}
 
-          {/* Photo Upload Section */}
           <div className="photo-upload-section">
             <div className="photo-upload-area">
               <input
@@ -173,17 +197,17 @@ const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly =
             {/* Left Column */}
             <div className="form-column-left">
               <div className="form-group">
-                <label htmlFor="name">Name *</label>
+                <label htmlFor="staff_name">Name *</label>
                 <input
                   type="text"
-                  id="name"
-                  name="name"
-                  value={formData.name}
+                  id="staff_name"
+                  name="staff_name"
+                  value={formData.staff_name}
                   onChange={handleChange}
                   required
                   disabled={viewOnly}
                 />
-                {errors.name && <span className="error-text">{errors.name}</span>}
+                {errors.staff_name && <span className="error-text">{errors.staff_name}</span>}
               </div>
 
               <div className="form-group">
@@ -299,18 +323,9 @@ const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly =
                   disabled={viewOnly}
                 >
                   <option value="">Select Class</option>
-                  <option value="1st">1st</option>
-                  <option value="2nd">2nd</option>
-                  <option value="3rd">3rd</option>
-                  <option value="4th">4th</option>
-                  <option value="5th">5th</option>
-                  <option value="6th">6th</option>
-                  <option value="7th">7th</option>
-                  <option value="8th">8th</option>
-                  <option value="9th">9th</option>
-                  <option value="10th">10th</option>
-                  <option value="11th">11th</option>
-                  <option value="12th">12th</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -324,11 +339,9 @@ const FacultyForm = ({ faculty, onClose, onSubmit, isEditing = false, viewOnly =
                   disabled={viewOnly}
                 >
                   <option value="">Select Section</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                  <option value="E">E</option>
+                  {sectionOptions.map((s) => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
                 </select>
               </div>
 

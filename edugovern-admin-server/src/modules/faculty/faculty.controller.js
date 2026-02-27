@@ -29,13 +29,16 @@ export const getAllFaculty = async (req, res) => {
 };
 
 /**
- * Get faculty by ID
- * GET /api/faculty/:id
+ * Get faculty by staff_id
+ * GET /api/faculty/:id (id param = staff_id, e.g. staff100@sks)
  */
 export const getFacultyById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const faculty = await facultyService.getFacultyById(parseInt(id));
+    const staffId = (req.params.id ?? '').toString().trim();
+    if (!staffId) {
+      return res.status(400).json({ success: false, message: 'Invalid staff_id' });
+    }
+    const faculty = await facultyService.getFacultyById(staffId);
     res.status(200).json({
       success: true,
       message: 'Faculty fetched successfully',
@@ -72,12 +75,15 @@ export const createFaculty = async (req, res) => {
 
 /**
  * Update faculty
- * PUT /api/faculty/:id
+ * PUT /api/faculty/:id (id param = staff_id)
  */
 export const updateFaculty = async (req, res) => {
   try {
-    const { id } = req.params;
-    const faculty = await facultyService.updateFaculty(parseInt(id), req.body);
+    const staffId = (req.params.id ?? '').toString().trim();
+    if (!staffId) {
+      return res.status(400).json({ success: false, message: 'Invalid staff_id' });
+    }
+    const faculty = await facultyService.updateFaculty(staffId, req.body);
     res.status(200).json({
       success: true,
       message: 'Faculty updated successfully',
@@ -94,12 +100,15 @@ export const updateFaculty = async (req, res) => {
 
 /**
  * Delete faculty
- * DELETE /api/faculty/:id
+ * DELETE /api/faculty/:id (id param = staff_id)
  */
 export const deleteFaculty = async (req, res) => {
   try {
-    const { id } = req.params;
-    await facultyService.deleteFaculty(parseInt(id));
+    const staffId = (req.params.id ?? '').toString().trim();
+    if (!staffId) {
+      return res.status(400).json({ success: false, message: 'Invalid staff_id' });
+    }
+    await facultyService.deleteFaculty(staffId);
     res.status(200).json({
       success: true,
       message: 'Faculty deleted successfully'

@@ -14,10 +14,11 @@ const Sidebar = () => {
     { id: 4, label: 'Announcement', path: '/admin/announcements' },
     { id: 5, label: 'Transport', path: '/admin/transport' },
     { id: 6, label: 'Messages', path: '/admin/messages' },
-    { id: 7, label: 'Request/ Approval' },
+    { id: 7, label: 'Request/ Approval', path: '/admin/requests' },
     { id: 8, label: 'Report Generate', path: '/admin/reports' },
-    { id: 9, label: 'Settings' },
-    { id: 10, label: 'Logout' }
+    { id: 9, label: 'Academic Setup', path: '/admin/academic-setup' },
+    { id: 10, label: 'Student Progress', path: '/admin/student-progress' },
+    { id: 11, label: 'Logout', path: null }
   ];
 
   const handleMenuClick = (item) => {

@@ -152,6 +152,13 @@ The frontend will run on `http://localhost:5173`
   - Body: `{ "admin_id": "ADMIN001", "password": "admin123" }`
   - Response: `{ "success": true, "data": { "token": "...", "admin": {...} } }`
 
+### File uploads
+
+- `POST /api/uploads` (Protected: requires admin JWT)
+  - Multipart form-data: field `file` (file to upload), optional `folder` (e.g., `students`, `staff`, `buses`, `messages`)
+  - Response: `{ "success": true, "data": { "url": "https://...", "public_id": "...", "resource_type": "image|raw", "size": 12345, "name": "file.png", "type": "image/png" } }`
+  - Notes: Files are uploaded to Cloudinary when Cloudinary credentials are present in `.env`. Allowed file types include common images and documents; max size is 20MB by default.
+
 ## Project Features (Current Scope)
 
 ✅ Admin Login (Admin ID + Password)
@@ -177,6 +184,8 @@ The frontend will run on `http://localhost:5173`
 - Only basic authentication and dashboard UI are implemented in this phase
 - All passwords are hashed using bcrypt (10 salt rounds)
 - JWT tokens expire after 1 hour
+- File uploads (student/staff images, transport bus images, and message attachments such as PNG/PDF) are uploaded to Cloudinary when `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` are set in the backend `.env`. For convenience, the server also supports legacy names `CLOUD_NAME`, `CLOUD_API_KEY`, and `CLOUD_API_SECRET`.
+- Local serving of `/uploads` is disabled by default; set `ALLOW_LOCAL_UPLOADS=true` to enable local file storage (not recommended for production).
 
 ## Troubleshooting
 

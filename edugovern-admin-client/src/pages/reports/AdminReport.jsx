@@ -6,10 +6,13 @@ import {
   generateStaffReport,
   generateTransportReport
 } from '../../services/report.service.js';
-import { getBusMaintenance } from '../../services/transport.service.js';
+import { getBusMaintenance, getAllBuses } from '../../services/transport.service.js';
+import { getClasses, getSections } from '../../services/academic.service.js';
 
 const AdminReport = () => {
   const [reportType, setReportType] = useState('student');
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
   const [filters, setFilters] = useState({
     class: '',
     section: '',
@@ -22,6 +25,8 @@ const AdminReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedBusesForMaintenance, setSelectedBusesForMaintenance] = useState(new Set());
+  const [busListForMaintenance, setBusListForMaintenance] = useState([]);
+  const [loadingBusesForMaintenance, setLoadingBusesForMaintenance] = useState(false);
   const [showBusRecordsFields, setShowBusRecordsFields] = useState(true);
   const [showMaintenanceRecordsFields, setShowMaintenanceRecordsFields] = useState(false);
   const [selectedFields, setSelectedFields] = useState({
@@ -52,6 +57,48 @@ const AdminReport = () => {
     bus_number: true,
     registration_number: true
   });
+
+  useEffect(() => {
+    getClasses().then((data) => setClasses(Array.isArray(data) ? data : [])).catch(() => setClasses([]));
+  }, []);
+
+  useEffect(() => {
+    if (!filters.class) {
+      setSections([]);
+      return;
+    }
+    const classId = classes.find((c) => c.name === filters.class)?.id;
+    if (!classId) {
+      setSections([]);
+      return;
+    }
+    getSections(classId).then((data) => setSections(Array.isArray(data) ? data : [])).catch(() => setSections([]));
+  }, [filters.class, classes]);
+
+  // Load bus list for "Include Maintenance Records"
+  useEffect(() => {
+    if (reportType !== 'transport' || !showMaintenanceRecordsFields) {
+      setBusListForMaintenance([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingBusesForMaintenance(true);
+    getAllBuses()
+      .then((data) => {
+        if (!cancelled && Array.isArray(data)) {
+          setBusListForMaintenance(data);
+        } else if (!cancelled) {
+          setBusListForMaintenance([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBusListForMaintenance([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBusesForMaintenance(false);
+      });
+    return () => { cancelled = true; };
+  }, [reportType, showMaintenanceRecordsFields]);
 
   const handleGenerateReport = async () => {
     try {
@@ -84,15 +131,44 @@ const AdminReport = () => {
       } else if (reportType === 'transport') {
         if (filters.status) reportFilters.status = filters.status;
         report = await generateTransportReport(reportFilters);
-        
-        // Initialize selected buses - by default, all buses with maintenance records are selected
+
+        // Initialize selected buses: preserve user's pre-selection from bus list, or default to all buses with maintenance
+        let selectedBusIds = new Set();
         if (report && report.data) {
           const busesWithMaintenance = report.data
             .filter(bus => bus.maintenanceRecords && bus.maintenanceRecords.length > 0)
             .map(bus => bus.id);
-          setSelectedBusesForMaintenance(new Set(busesWithMaintenance));
+          const hadPreSelection = selectedBusesForMaintenance.size > 0;
+          const reportBusIds = new Set(report.data.map(b => b.id));
+          if (hadPreSelection) {
+            // Keep only pre-selected IDs that exist in the report
+            selectedBusIds = new Set([...selectedBusesForMaintenance].filter(id => reportBusIds.has(id)));
+          } else {
+            selectedBusIds = new Set(busesWithMaintenance);
+          }
+          setSelectedBusesForMaintenance(selectedBusIds);
         } else {
           setSelectedBusesForMaintenance(new Set());
+        }
+
+        // Recalculate maintenance statistics to include only selected buses (so report reflects checkbox selection)
+        if (report && report.data && report.statistics) {
+          const totalMaintenanceRecords = report.data.reduce(
+            (sum, bus) => sum + (selectedBusIds.has(bus.id) ? (bus.maintenanceCount || 0) : 0),
+            0
+          );
+          const totalMaintenanceCost = report.data.reduce(
+            (sum, bus) => sum + (selectedBusIds.has(bus.id) ? (parseFloat(bus.totalMaintenanceCost) || 0) : 0),
+            0
+          );
+          report = {
+            ...report,
+            statistics: {
+              ...report.statistics,
+              totalMaintenanceRecords,
+              totalMaintenanceCost: totalMaintenanceCost.toFixed(2)
+            }
+          };
         }
       } else {
         // Reset selection when switching report types
@@ -428,7 +504,7 @@ const AdminReport = () => {
         content += '<tr><th>Name</th><th>Designation</th><th>Email</th><th>Contact</th><th>Experience</th><th>Status</th></tr>';
         data.data.forEach(item => {
           content += `<tr>
-            <td>${item.name || ''}</td>
+            <td>${item.staff_name || item.name || ''}</td>
             <td>${item.designation || ''}</td>
             <td>${item.email || ''}</td>
             <td>${item.contact || ''}</td>
@@ -495,7 +571,7 @@ const AdminReport = () => {
   const generateStaffCSV = (data) => {
     let csv = 'Name,Designation,Email,Contact,Experience,Status\n';
     data.forEach(item => {
-      csv += `${item.name || ''},${item.designation || ''},${item.email || ''},${item.contact || ''},${item.experience || 0},${item.status || ''}\n`;
+      csv += `${item.staff_name || item.name || ''},${item.designation || ''},${item.email || ''},${item.contact || ''},${item.experience || 0},${item.status || ''}\n`;
     });
     return csv;
   };
@@ -745,21 +821,12 @@ const AdminReport = () => {
                     <label>Class</label>
                     <select
                       value={filters.class}
-                      onChange={(e) => setFilters({ ...filters, class: e.target.value })}
+                      onChange={(e) => setFilters({ ...filters, class: e.target.value, section: '' })}
                     >
                       <option value="">All Classes</option>
-                      <option value="1st">1st</option>
-                      <option value="2nd">2nd</option>
-                      <option value="3rd">3rd</option>
-                      <option value="4th">4th</option>
-                      <option value="5th">5th</option>
-                      <option value="6th">6th</option>
-                      <option value="7th">7th</option>
-                      <option value="8th">8th</option>
-                      <option value="9th">9th</option>
-                      <option value="10th">10th</option>
-                      <option value="11th">11th</option>
-                      <option value="12th">12th</option>
+                      {classes.map((c) => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div className="filter-group">
@@ -769,11 +836,9 @@ const AdminReport = () => {
                       onChange={(e) => setFilters({ ...filters, section: e.target.value })}
                     >
                       <option value="">All Sections</option>
-                      <option value="A">A</option>
-                      <option value="B">B</option>
-                      <option value="C">C</option>
-                      <option value="D">D</option>
-                      <option value="E">E</option>
+                      {sections.map((s) => (
+                        <option key={s.id} value={s.name}>{s.name}</option>
+                      ))}
                     </select>
                   </div>
                 </>
@@ -1189,8 +1254,17 @@ const AdminReport = () => {
               <div className="maintenance-selection">
                 <div className="maintenance-selection-header">
                   <h3>Include Maintenance Records</h3>
+                  <p className="maintenance-selection-hint">
+                    Select buses to include their maintenance records in the report. Statistics and details update when you check or uncheck.
+                  </p>
                 </div>
-                {reportData && reportData.data && reportData.data.length > 0 ? (
+                {loadingBusesForMaintenance ? (
+                  <div className="maintenance-checkboxes">
+                    <p style={{ padding: '15px', color: '#666', fontStyle: 'italic', textAlign: 'center' }}>
+                      Loading buses...
+                    </p>
+                  </div>
+                ) : (reportData && reportData.data && reportData.data.length > 0 ? (
                   <>
                     <div className="maintenance-checkboxes">
                       {reportData.data.map((bus) => (
@@ -1240,13 +1314,54 @@ const AdminReport = () => {
                       </button>
                     </div>
                   </>
+                ) : busListForMaintenance.length > 0 ? (
+                  <>
+                    <div className="maintenance-checkboxes">
+                      {busListForMaintenance.map((bus) => (
+                        <label key={bus.id} className="maintenance-checkbox-item">
+                          <input
+                            type="checkbox"
+                            checked={selectedBusesForMaintenance.has(bus.id)}
+                            onChange={(e) => {
+                              const newSelection = new Set(selectedBusesForMaintenance);
+                              if (e.target.checked) {
+                                newSelection.add(bus.id);
+                              } else {
+                                newSelection.delete(bus.id);
+                              }
+                              setSelectedBusesForMaintenance(newSelection);
+                            }}
+                          />
+                          <span className="checkbox-label">
+                            <strong>{bus.bus_number}</strong> - {bus.registration_number}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="selection-actions">
+                      <button
+                        className="select-all-btn"
+                        onClick={() => {
+                          setSelectedBusesForMaintenance(new Set(busListForMaintenance.map(bus => bus.id)));
+                        }}
+                      >
+                        Select All
+                      </button>
+                      <button
+                        className="deselect-all-btn"
+                        onClick={() => setSelectedBusesForMaintenance(new Set())}
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <div className="maintenance-checkboxes">
                     <p style={{ padding: '15px', color: '#666', fontStyle: 'italic', textAlign: 'center' }}>
-                      Generate report to see available buses for maintenance records selection.
+                      No buses available. Add buses in Transport or generate report to see options.
                     </p>
                   </div>
-                )}
+                ))}
               </div>
             )}
 
@@ -1317,7 +1432,7 @@ const AdminReport = () => {
               {/* Transport Maintenance Alerts */}
               {reportType === 'transport' && reportData.maintenanceAlerts && reportData.maintenanceAlerts.length > 0 && (
                 <div className="maintenance-alerts">
-                  <h3>⚠️ Maintenance Alerts</h3>
+                  <h3>Maintenance Alerts</h3>
                   <div className="alerts-list">
                     {reportData.maintenanceAlerts.map((bus, idx) => (
                       <div key={idx} className="alert-item">
@@ -1393,7 +1508,7 @@ const AdminReport = () => {
                             )}
                             {reportType === 'staff' && (
                               <>
-                                <td>{item.name || '-'}</td>
+                                <td>{item.staff_name || item.name || '-'}</td>
                                 <td>{item.designation || '-'}</td>
                                 <td>{item.email || '-'}</td>
                                 <td>{item.contact || '-'}</td>

@@ -3,30 +3,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-/**
- * Email Configuration
- * Configure nodemailer transporter for sending emails
- */
-
-// Create transporter
-// For development, using Gmail SMTP (configure in .env)
-// For production, use proper SMTP service
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: process.env.SMTP_PORT || 587,
-  secure: false, // true for 465, false for other ports
+  secure: false, 
   auth: {
     user: process.env.SMTP_USER || '',
     pass: process.env.SMTP_PASS || ''
   }
 });
 
-/**
- * Send password reset email
- * @param {string} email - Admin email address
- * @param {string} resetLink - Password reset link with token
- * @returns {Promise<Object>} Email send result
- */
+
 export const sendPasswordResetEmail = async (email, resetLink) => {
   try {
     const mailOptions = {

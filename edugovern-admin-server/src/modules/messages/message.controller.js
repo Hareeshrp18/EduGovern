@@ -1,4 +1,6 @@
 import * as messageService from './message.service.js';
+import cloudinary from '../../config/cloudinary.config.js';
+import { Readable } from 'stream';
 
 /**
  * Message Controller - Request/response handling for message operations
@@ -10,12 +12,11 @@ import * as messageService from './message.service.js';
  */
 export const getAllMessages = async (req, res) => {
   try {
-    const { sender_type, is_read, is_replied } = req.query;
+    const { sender_type, is_read } = req.query;
     const filters = {};
     
     if (sender_type) filters.sender_type = sender_type;
     if (is_read !== undefined) filters.is_read = is_read === 'true';
-    if (is_replied !== undefined) filters.is_replied = is_replied === 'true';
 
     const messages = await messageService.getAllMessages(filters);
     res.status(200).json({
@@ -64,12 +65,42 @@ export const getMessageById = async (req, res) => {
 export const createMessage = async (req, res) => {
   try {
     const attachment = req.file;
+    let attachmentInfo = null;
+
+    if (attachment) {
+      // Determine Cloudinary resource type (image vs raw for pdf/doc)
+      const resourceType = attachment.mimetype && attachment.mimetype.startsWith('image/') ? 'image' : 'raw';
+
+      const uploadResult = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'edugovern/messages',
+            resource_type: resourceType,
+            transformation: resourceType === 'image' ? [{ quality: 'auto' }] : undefined
+          },
+          (error, result) => {
+            if (error) return reject(error);
+            resolve(result);
+          }
+        );
+
+        const bufferStream = new Readable();
+        bufferStream.push(attachment.buffer);
+        bufferStream.push(null);
+        bufferStream.pipe(uploadStream);
+      });
+
+      attachmentInfo = {
+        attachment_path: uploadResult.secure_url,
+        attachment_type: attachment.mimetype,
+        attachment_name: attachment.originalname,
+        attachment_size: attachment.size
+      };
+    }
+
     const messagePayload = {
       ...req.body,
-      attachment_path: attachment ? `/uploads/messages/${attachment.filename}` : null,
-      attachment_type: attachment ? attachment.mimetype : null,
-      attachment_name: attachment ? attachment.originalname : null,
-      attachment_size: attachment ? attachment.size : null
+      ...(attachmentInfo || {})
     };
 
     const message = await messageService.createMessage(messagePayload);
@@ -79,6 +110,7 @@ export const createMessage = async (req, res) => {
       data: message
     });
   } catch (error) {
+    console.error('createMessage error:', error);
     res.status(400).json({
       success: false,
       message: error.message || 'Failed to send reply'

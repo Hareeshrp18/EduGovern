@@ -4,6 +4,6 @@ dotenv.config();
 
 export const jwtConfig = {
   secret: process.env.JWT_SECRET || 'default_secret_change_in_production',
-  expiresIn: '1h' // Token expires in 1 hour
-};
+  expiresIn: '1h' 
 
+};

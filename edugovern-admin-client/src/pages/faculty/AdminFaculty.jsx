@@ -6,9 +6,10 @@ import {
   getAllFaculty,
   createFaculty,
   updateFaculty,
-  deleteFaculty,
-  getFacultyById
+  deleteFaculty
 } from '../../services/faculty.service.js';
+import { getClasses, getSections } from '../../services/academic.service.js';
+import { normalizeClassForCompare } from '../../utils/classCompare.js';
 
 /* Admin Faculty Page */
 const AdminFaculty = () => {
@@ -21,32 +22,52 @@ const AdminFaculty = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
+  const [deleteConfirmFaculty, setDeleteConfirmFaculty] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [allSections, setAllSections] = useState([]);
 
-  // Fetch faculty on component mount
   useEffect(() => {
     fetchFaculty();
   }, []);
 
-  // Filter faculty based on search, class, and section
-  // Faculty will only show when both class and section are selected
   useEffect(() => {
-    // Only filter if both class and section are selected
-    if (!selectedClass || !selectedSection) {
-      setFilteredFaculty([]);
+    getClasses().then((data) => setClasses(Array.isArray(data) ? data : [])).catch(() => setClasses([]));
+  }, []);
+
+  useEffect(() => {
+    getSections().then((data) => setAllSections(Array.isArray(data) ? data : [])).catch(() => setAllSections([]));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setSections([]);
       return;
     }
+    const classId = classes.find((c) => normalizeClassForCompare(c.name) === normalizeClassForCompare(selectedClass))?.id;
+    if (!classId) {
+      setSections([]);
+      return;
+    }
+    getSections(classId).then((data) => setSections(Array.isArray(data) ? data : [])).catch(() => setSections([]));
+  }, [selectedClass, classes]);
 
+  // Filter faculty: when class selected, show faculty for that class; section narrows further
+  useEffect(() => {
     let filtered = [...faculty];
 
-    // First filter by class and section (both required)
-    filtered = filtered.filter(f => 
-      f.class === selectedClass && f.section === selectedSection
-    );
+    if (selectedClass) {
+      const selectedClassNorm = normalizeClassForCompare(selectedClass);
+      filtered = filtered.filter(f =>
+        normalizeClassForCompare(f.class) === selectedClassNorm && (!selectedSection || f.section === selectedSection)
+      );
+    }
 
-    // Then apply search filter if search term exists
+    // Apply search filter if search term exists
     if (searchTerm) {
       filtered = filtered.filter(f =>
-        f.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (f.staff_name || f.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.designation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         f.contact?.includes(searchTerm)
@@ -75,37 +96,47 @@ const AdminFaculty = () => {
     setShowForm(true);
   };
 
-  const handleViewFaculty = async (id) => {
-    try {
-      const facultyMember = await getFacultyById(id);
-      setEditingFaculty({ ...facultyMember, viewOnly: true });
-      setShowForm(true);
-    } catch (err) {
-      setError(err.message || 'Failed to fetch faculty details');
-    }
+  const handleViewFaculty = (facultyMember) => {
+    setError('');
+    setEditingFaculty({ ...facultyMember, viewOnly: true });
+    setShowForm(true);
   };
 
-  const handleEditFaculty = async (id) => {
-    try {
-      const facultyMember = await getFacultyById(id);
-      setEditingFaculty(facultyMember);
-      setShowForm(true);
-    } catch (err) {
-      setError(err.message || 'Failed to fetch faculty details');
-    }
+  const handleEditFaculty = (facultyMember) => {
+    setError('');
+    setEditingFaculty({ ...facultyMember });
+    setShowForm(true);
   };
 
-  const handleDeleteFaculty = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this faculty member?')) {
+  const handleRemoveClick = (facultyMember) => {
+    const staffId = facultyMember?.staff_id;
+    if (!staffId || (typeof staffId === 'string' && !staffId.trim())) {
+      setError('Cannot delete: invalid faculty data');
       return;
     }
+    setError('');
+    setDeleteConfirmFaculty(facultyMember);
+  };
 
+  const handleDeleteConfirmClose = () => {
+    if (!deleting) setDeleteConfirmFaculty(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirmFaculty) return;
+    const staffId = deleteConfirmFaculty?.staff_id;
+    if (!staffId || (typeof staffId === 'string' && !staffId.trim())) return;
+
+    setDeleting(true);
     try {
-      await deleteFaculty(id);
+      await deleteFaculty(staffId);
+      setDeleteConfirmFaculty(null);
       await fetchFaculty();
       setError('');
     } catch (err) {
       setError(err.message || 'Failed to delete faculty');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -117,7 +148,8 @@ const AdminFaculty = () => {
   const handleSubmitForm = async (facultyData) => {
     try {
       if (editingFaculty && !editingFaculty.viewOnly) {
-        await updateFaculty(editingFaculty.id, facultyData);
+        if (!editingFaculty.staff_id) throw new Error('Invalid faculty: missing staff_id');
+        await updateFaculty(editingFaculty.staff_id, facultyData);
       } else {
         await createFaculty(facultyData);
       }
@@ -143,21 +175,12 @@ const AdminFaculty = () => {
               <select 
                 className="filter-btn"
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                onChange={(e) => { setSelectedClass(e.target.value); setSelectedSection(''); }}
               >
                 <option value="">Select Class</option>
-                <option value="1st">1st</option>
-                <option value="2nd">2nd</option>
-                <option value="3rd">3rd</option>
-                <option value="4th">4th</option>
-                <option value="5th">5th</option>
-                <option value="6th">6th</option>
-                <option value="7th">7th</option>
-                <option value="8th">8th</option>
-                <option value="9th">9th</option>
-                <option value="10th">10th</option>
-                <option value="11th">11th</option>
-                <option value="12th">12th</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
               </select>
               <select 
                 className="filter-btn"
@@ -165,11 +188,9 @@ const AdminFaculty = () => {
                 onChange={(e) => setSelectedSection(e.target.value)}
               >
                 <option value="">Select Section</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="E">E</option>
+                {sections.map((s) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
               </select>
             </div>
             <div className="search-promote-section">
@@ -182,7 +203,6 @@ const AdminFaculty = () => {
                 placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={!selectedClass || !selectedSection}
               />
             </div>
           </div>
@@ -194,18 +214,14 @@ const AdminFaculty = () => {
           <section className="faculty-table-section">
             {loading ? (
               <div className="loading-message">Loading faculty...</div>
-            ) : !selectedClass || !selectedSection ? (
-              <div className="faculty-table-placeholder">
-                <p className="placeholder-message">
-                  Please select both <strong>Class</strong> and <strong>Section</strong> to view faculty details.
-                </p>
-              </div>
             ) : filteredFaculty.length === 0 ? (
               <div className="faculty-table-placeholder">
                 <p className="placeholder-message">
-                  {searchTerm 
-                    ? `No faculty found matching "${searchTerm}" in ${selectedClass} - ${selectedSection}.`
-                    : `No faculty found in ${selectedClass} - ${selectedSection}. Click "Add Faculty" to add a new faculty member.`
+                  {searchTerm
+                    ? `No faculty found matching "${searchTerm}"${selectedClass ? ` in ${selectedClass}${selectedSection ? ` - ${selectedSection}` : ''}` : ''}.`
+                    : selectedClass
+                      ? `No faculty found in ${selectedClass}${selectedSection ? ` - ${selectedSection}` : ''}. Click "Add Faculty" to add a new faculty member.`
+                      : 'No faculty records yet. Click "Add Faculty" to add a new faculty member.'
                   }
                 </p>
               </div>
@@ -215,6 +231,7 @@ const AdminFaculty = () => {
                   <thead>
                     <tr>
                       <th>S.no</th>
+                      <th>Staff ID</th>
                       <th>Name</th>
                       <th>Designation</th>
                       <th>Class</th>
@@ -224,9 +241,10 @@ const AdminFaculty = () => {
                   </thead>
                   <tbody>
                     {filteredFaculty.map((facultyMember, index) => (
-                      <tr key={facultyMember.id}>
+                      <tr key={facultyMember.staff_id ?? index}>
                         <td>{(index + 1).toString().padStart(2, '0')}</td>
-                        <td>{facultyMember.name || '-'}</td>
+                        <td>{facultyMember.staff_id || '-'}</td>
+                        <td>{facultyMember.staff_name || facultyMember.name || '-'}</td>
                         <td>{facultyMember.designation || '-'}</td>
                         <td>{facultyMember.class || '-'}</td>
                         <td>{facultyMember.section || '-'}</td>
@@ -234,19 +252,19 @@ const AdminFaculty = () => {
                           <div className="action-buttons">
                             <button 
                               className="action-btn view-btn"
-                              onClick={() => handleViewFaculty(facultyMember.id)}
+                              onClick={() => handleViewFaculty(facultyMember)}
                             >
                               View
                             </button>
                             <button 
                               className="action-btn update-btn"
-                              onClick={() => handleEditFaculty(facultyMember.id)}
+                              onClick={() => handleEditFaculty(facultyMember)}
                             >
                               Update
                             </button>
                             <button 
                               className="action-btn delete-btn"
-                              onClick={() => handleDeleteFaculty(facultyMember.id)}
+                              onClick={() => handleRemoveClick(facultyMember)}
                             >
                               Remove
                             </button>
@@ -264,12 +282,46 @@ const AdminFaculty = () => {
 
       {showForm && (
         <FacultyForm
+          key={editingFaculty ? `faculty-${editingFaculty.staff_id}-${editingFaculty.viewOnly ? 'view' : 'edit'}` : 'faculty-add'}
           faculty={editingFaculty}
           onClose={handleCloseForm}
           onSubmit={handleSubmitForm}
           isEditing={!!editingFaculty && !editingFaculty?.viewOnly}
-          viewOnly={editingFaculty?.viewOnly || false}
+          viewOnly={!!editingFaculty?.viewOnly}
+          classes={classes}
+          sections={allSections}
         />
+      )}
+
+      {deleteConfirmFaculty && (
+        <div className="delete-confirm-overlay" onClick={handleDeleteConfirmClose}>
+          <div className="delete-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="delete-confirm-title">Remove faculty member</h3>
+            <p className="delete-confirm-message">
+              Are you sure you want to remove{' '}
+              <strong>{deleteConfirmFaculty.staff_name || deleteConfirmFaculty.name || 'this faculty member'}</strong>?
+              This action cannot be undone.
+            </p>
+            <div className="delete-confirm-actions">
+              <button
+                type="button"
+                className="delete-confirm-cancel"
+                onClick={handleDeleteConfirmClose}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="delete-confirm-submit"
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+              >
+                {deleting ? 'Removing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -217,6 +217,39 @@ export const deleteMaintenance = async (id) => {
   }
 };
 
+/**
+ * Upload bus images to Cloudinary
+ * @param {FileList|Array<File>} files - Image files to upload
+ * @returns {Promise<Array<string>>} Array of image URLs
+ */
+export const uploadBusImages = async (files) => {
+  try {
+    const formData = new FormData();
+    Array.from(files).forEach((file) => {
+      formData.append('images', file);
+    });
+
+    const token = getToken();
+    const response = await axios.post(
+      `${API_URL}/api/transport/buses/upload-images`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          Authorization: token ? `Bearer ${token}` : ''
+        }
+      }
+    );
+
+    return response.data.data.images;
+  } catch (error) {
+    if (error.response) {
+      throw new Error(error.response.data.message || 'Failed to upload images');
+    }
+    throw new Error('Network error. Please check your connection.');
+  }
+};
+
 export default {
   getAllBuses,
   getBusById,

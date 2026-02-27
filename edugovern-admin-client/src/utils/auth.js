@@ -1,31 +1,23 @@
-/**
- * Authentication utility functions
- * Handles token management in localStorage
- */
-
 const TOKEN_KEY = 'edugovern_admin_token';
 
-/**
- * Get JWT token from localStorage
- * @returns {string|null} Token or null if not found
- */
+
 export const getToken = () => {
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 };
 
 /**
- * Store JWT token in localStorage
+ * Store JWT token in sessionStorage
  * @param {string} token - JWT token
  */
 export const setToken = (token) => {
-  localStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(TOKEN_KEY, token);
 };
 
 /**
- * Remove JWT token from localStorage
+ * Remove JWT token from sessionStorage
  */
 export const removeToken = () => {
-  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 };
 
 /**

@@ -27,7 +27,7 @@ export const login = async (adminId, password) => {
     });
 
     if (response.data.success && response.data.data.token) {
-      // Store token in localStorage
+      // Store token in sessionStorage (cleared when tab closes)
       setToken(response.data.data.token);
       return response.data.data;
     }
@@ -49,7 +49,7 @@ export const login = async (adminId, password) => {
 
 /**
  * Logout admin
- * Removes token from localStorage
+ * Removes token from sessionStorage
  */
 export const logout = () => {
   removeToken();

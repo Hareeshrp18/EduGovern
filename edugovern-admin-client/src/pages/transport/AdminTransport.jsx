@@ -11,7 +11,8 @@ import {
   getBusMaintenance,
   createMaintenance,
   updateMaintenance,
-  deleteMaintenance
+  deleteMaintenance,
+  uploadBusImages
 } from '../../services/transport.service.js';
 
 /* Admin Transport Dashboard Page */
@@ -440,9 +441,7 @@ const AdminTransport = () => {
                       return (
                         <tr 
                           key={bus.id} 
-                          className={`${hasAlerts ? 'has-alerts' : ''} clickable-row`}
-                          onClick={() => handleViewBus(bus.id)}
-                          style={{ cursor: 'pointer' }}
+                          className={hasAlerts ? 'has-alerts' : ''}
                         >
                           <td>{(index + 1).toString().padStart(2, '0')}</td>
                           <td>
@@ -466,8 +465,14 @@ const AdminTransport = () => {
                               {bus.status}
                             </span>
                           </td>
-                          <td onClick={(e) => e.stopPropagation()}>
+                          <td>
                             <div className="action-buttons">
+                              <button
+                                className="action-btn view-btn"
+                                onClick={() => handleViewBus(bus.id)}
+                              >
+                                View
+                              </button>
                               <button
                                 className="action-btn update-btn"
                                 onClick={() => handleEditBus(bus.id)}
@@ -621,13 +626,18 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
     insurance_expiry: '',
     fc_expiry: '',
     permit_expiry: '',
+    images: [],
     status: 'Active'
   });
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   useEffect(() => {
     if (bus) {
+      const existingImages = bus.images && Array.isArray(bus.images) ? bus.images : [];
       setFormData({
         bus_number: bus.bus_number || '',
         registration_number: bus.registration_number || '',
@@ -641,8 +651,10 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
         insurance_expiry: bus.insurance_expiry ? bus.insurance_expiry.split('T')[0] : '',
         fc_expiry: bus.fc_expiry ? bus.fc_expiry.split('T')[0] : '',
         permit_expiry: bus.permit_expiry ? bus.permit_expiry.split('T')[0] : '',
+        images: existingImages,
         status: bus.status || 'Active'
       });
+      setImagePreviews(existingImages);
     }
   }, [bus]);
 
@@ -658,6 +670,58 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
         delete newErrors[name];
         return newErrors;
       });
+    }
+  };
+
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    // Validate file types and sizes
+    const validFiles = files.filter(file => {
+      const isValidType = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'].includes(file.type);
+      const isValidSize = file.size <= 10 * 1024 * 1024; // 10MB
+      return isValidType && isValidSize;
+    });
+
+    if (validFiles.length !== files.length) {
+      setErrors(prev => ({
+        ...prev,
+        images: 'Some files are invalid. Only images (max 10MB each) are allowed.'
+      }));
+      return;
+    }
+
+    // Create previews for new files
+    const newPreviews = validFiles.map(file => URL.createObjectURL(file));
+    setImagePreviews(prev => [...prev, ...newPreviews]);
+    setImageFiles(prev => [...prev, ...validFiles]);
+
+    // Clear error
+    if (errors.images) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.images;
+        return newErrors;
+      });
+    }
+  };
+
+  const handleRemoveImage = (index, isExisting = false) => {
+    if (isExisting) {
+      // Remove existing image URL
+      const newImages = formData.images.filter((_, i) => i !== index);
+      setFormData(prev => ({ ...prev, images: newImages }));
+      setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    } else {
+      // Remove new file
+      const fileIndex = index - formData.images.length;
+      const newFiles = imageFiles.filter((_, i) => i !== fileIndex);
+      const newPreviews = imagePreviews.slice(0, formData.images.length).concat(
+        newFiles.map(file => URL.createObjectURL(file))
+      );
+      setImageFiles(newFiles);
+      setImagePreviews(newPreviews);
     }
   };
 
@@ -678,10 +742,23 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
     if (!validate()) return;
 
     setLoading(true);
+    setUploadingImages(false);
     try {
-      await onSubmit(formData);
+      let finalImages = [...formData.images];
+
+      // Upload new images if any
+      if (imageFiles.length > 0) {
+        setUploadingImages(true);
+        const uploadedUrls = await uploadBusImages(imageFiles);
+        finalImages = [...finalImages, ...uploadedUrls];
+        setUploadingImages(false);
+      }
+
+      // Submit form with images
+      await onSubmit({ ...formData, images: finalImages });
     } catch (error) {
       setErrors({ submit: error.message });
+      setUploadingImages(false);
     } finally {
       setLoading(false);
     }
@@ -856,6 +933,41 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
                   <option value="Under Maintenance">Under Maintenance</option>
                 </select>
               </div>
+
+              <div className="form-group">
+                <label htmlFor="bus_images">Bus Images</label>
+                <input
+                  type="file"
+                  id="bus_images"
+                  name="bus_images"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  multiple
+                  onChange={handleImageChange}
+                />
+                <small className="form-hint">You can select multiple images (max 10MB each)</small>
+                {errors.images && <span className="error-text">{errors.images}</span>}
+              </div>
+
+              {/* Image Previews */}
+              {imagePreviews.length > 0 && (
+                <div className="form-group">
+                  <label>Image Previews</label>
+                  <div className="image-preview-grid">
+                    {imagePreviews.map((preview, index) => (
+                      <div key={index} className="image-preview-item">
+                        <img src={preview} alt={`Preview ${index + 1}`} />
+                        <button
+                          type="button"
+                          className="remove-image-btn"
+                          onClick={() => handleRemoveImage(index, index < formData.images.length)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -863,8 +975,8 @@ const BusForm = ({ bus, onClose, onSubmit, isEditing = false }) => {
             <button type="button" className="cancel-btn" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="submit-btn" disabled={loading}>
-              {loading ? 'Saving...' : isEditing ? 'Update' : 'Add'}
+            <button type="submit" className="submit-btn" disabled={loading || uploadingImages}>
+              {uploadingImages ? 'Uploading Images...' : loading ? 'Saving...' : isEditing ? 'Update' : 'Add'}
             </button>
           </div>
         </form>
@@ -977,6 +1089,58 @@ const BusDetailsModal = ({
               </div>
             </div>
           </div>
+
+          {/* Bus Images Section (defensive parsing & normalization) */}
+          {(() => {
+            // Normalize images field which might be an array, a JSON string, or an array of objects
+            let images = [];
+            try {
+              if (Array.isArray(bus.images)) {
+                images = bus.images;
+              } else if (typeof bus.images === 'string' && bus.images.trim()) {
+                images = JSON.parse(bus.images);
+              }
+
+              // If images are objects (e.g., { url, secure_url, public_id }) map to url/secure_url
+              images = images.map(img => {
+                if (!img) return null;
+                if (typeof img === 'string') return img;
+                if (img.secure_url) return img.secure_url;
+                if (img.url) return img.url;
+                if (img.public_id) return `https://res.cloudinary.com/${import.meta.env.VITE_CLOUD_NAME || ''}/image/upload/${img.public_id}`;
+                return null;
+              }).filter(Boolean);
+            } catch (e) {
+              images = [];
+              console.warn('Failed to parse bus images', e);
+            }
+
+            if (images.length === 0) {
+              return (
+                <div className="bus-images-section">
+                  <h3>Bus Images</h3>
+                  <div className="no-images-placeholder">No images available for this bus.</div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="bus-images-section">
+                <h3>Bus Images</h3>
+                <div className="bus-images-grid">
+                  {images.map((imageUrl, index) => (
+                    <div key={index} className="bus-image-item">
+                      <img
+                        src={imageUrl}
+                        alt={`Bus ${bus.bus_number} - Image ${index + 1}`}
+                        onClick={() => window.open(imageUrl, '_blank')}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Maintenance Section */}
           <div className="maintenance-section">

@@ -7,6 +7,18 @@ import * as maintenanceService from '../transport/maintenance.service.js';
  * Report Service - Business logic for report generation
  */
 
+/** Normalize class for comparison so "10th" and "10" match (students/faculty may use either). */
+function normalizeClassForCompare(val) {
+  if (val == null || val === '') return '';
+  const v = String(val).trim();
+  if (/^PreKG$/i.test(v)) return 'prekg';
+  if (/^LKG$/i.test(v)) return 'lkg';
+  if (/^UKG$/i.test(v)) return 'ukg';
+  const numMatch = v.match(/^(\d+)/);
+  if (numMatch) return numMatch[1];
+  return v.toLowerCase();
+}
+
 /**
  * Generate student report
  * @param {Object} filters - Filter options (class, section, status)
@@ -16,9 +28,10 @@ export const generateStudentReport = async (filters = {}) => {
   try {
     let students = await studentModel.findAll();
 
-    // Apply filters
+    // Apply filters (class compared normalized so "10th" matches "10")
     if (filters.class) {
-      students = students.filter(s => s.class === filters.class);
+      const classNorm = normalizeClassForCompare(filters.class);
+      students = students.filter(s => normalizeClassForCompare(s.class) === classNorm);
     }
     if (filters.section) {
       students = students.filter(s => s.section === filters.section);
@@ -120,7 +133,8 @@ export const generateStaffReport = async (filters = {}) => {
       faculty = faculty.filter(f => f.status === filters.status);
     }
     if (filters.class) {
-      faculty = faculty.filter(f => f.class === filters.class);
+      const classNorm = normalizeClassForCompare(filters.class);
+      faculty = faculty.filter(f => normalizeClassForCompare(f.class) === classNorm);
     }
     if (filters.section) {
       faculty = faculty.filter(f => f.section === filters.section);

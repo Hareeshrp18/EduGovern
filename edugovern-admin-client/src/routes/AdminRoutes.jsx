@@ -9,6 +9,9 @@ import AdminFaculty from '../pages/faculty/AdminFaculty.jsx';
 import AdminTransport from '../pages/transport/AdminTransport.jsx';
 import AdminMessages from '../pages/messages/AdminMessages.jsx';
 import AdminReport from '../pages/reports/AdminReport.jsx';
+import AdminRequests from '../pages/requests/AdminRequests.jsx';
+import AdminAcademicSetup from '../pages/academicSetup/AdminAcademicSetup.jsx';
+import AdminStudentProgress from '../pages/studentProgress/AdminStudentProgress.jsx';
 import { isAuthenticated } from '../utils/auth.js';
 
 /*Protected Route ComponentRedirects to login if not authenticated*/
@@ -85,7 +88,31 @@ const AdminRoutes = () => {
           </ProtectedRoute>
         }
       />
-      
+      <Route
+        path="/admin/requests"
+        element={
+          <ProtectedRoute>
+            <AdminRequests />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/academic-setup"
+        element={
+          <ProtectedRoute>
+            <AdminAcademicSetup />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/student-progress"
+        element={
+          <ProtectedRoute>
+            <AdminStudentProgress />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Default redirects */}
       <Route path="/" element={<Navigate to="/admin/login" replace />} />
       <Route path="/admin" element={<Navigate to="/admin/login" replace />} />

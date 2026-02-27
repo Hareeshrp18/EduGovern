@@ -49,13 +49,13 @@ export const getAllFaculty = async (className = null, section = null) => {
 };
 
 /**
- * Get faculty by ID
- * @param {number} id - Faculty ID
+ * Get faculty by staff_id
+ * @param {string} staffId - staff_id (e.g. staff100@sks)
  * @returns {Promise<Object>} Faculty data
  */
-export const getFacultyById = async (id) => {
+export const getFacultyById = async (staffId) => {
   try {
-    const response = await apiClient.get(`/api/faculty/${id}`);
+    const response = await apiClient.get(`/api/faculty/${encodeURIComponent(staffId)}`);
     return response.data.data;
   } catch (error) {
     if (error.response) {
@@ -84,13 +84,13 @@ export const createFaculty = async (facultyData) => {
 
 /**
  * Update faculty
- * @param {number} id - Faculty ID
+ * @param {string} staffId - staff_id (e.g. staff100@sks)
  * @param {Object} facultyData - Updated faculty data
  * @returns {Promise<Object>} Updated faculty
  */
-export const updateFaculty = async (id, facultyData) => {
+export const updateFaculty = async (staffId, facultyData) => {
   try {
-    const response = await apiClient.put(`/api/faculty/${id}`, facultyData);
+    const response = await apiClient.put(`/api/faculty/${encodeURIComponent(staffId)}`, facultyData);
     return response.data.data;
   } catch (error) {
     if (error.response) {
@@ -102,12 +102,12 @@ export const updateFaculty = async (id, facultyData) => {
 
 /**
  * Delete faculty
- * @param {number} id - Faculty ID
+ * @param {string} staffId - staff_id (e.g. staff100@sks)
  * @returns {Promise<void>}
  */
-export const deleteFaculty = async (id) => {
+export const deleteFaculty = async (staffId) => {
   try {
-    await apiClient.delete(`/api/faculty/${id}`);
+    await apiClient.delete(`/api/faculty/${encodeURIComponent(staffId)}`);
   } catch (error) {
     if (error.response) {
       throw new Error(error.response.data.message || 'Failed to delete faculty');

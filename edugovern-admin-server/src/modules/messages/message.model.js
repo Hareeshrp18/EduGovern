@@ -11,53 +11,28 @@ import pool from '../../config/mysql.config.js';
  */
 export const findAllForAdmin = async (filters = {}) => {
   try {
-    // First check if attachment columns exist
-    const [columns] = await pool.execute(
-      `SELECT COLUMN_NAME 
-       FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = DATABASE() 
-       AND TABLE_NAME = 'messages' 
-       AND COLUMN_NAME IN ('attachment_path', 'attachment_type', 'attachment_name', 'attachment_size')`
-    );
-    const hasAttachmentColumns = columns.length > 0;
-
     let query = `
-      SELECT m.*, 
-             rm.message as reply_message,
-             rm.created_at as reply_created_at
-    `;
-
-    // Only include attachment columns if they exist
-    if (hasAttachmentColumns) {
-      query += `, rm.attachment_path as reply_attachment_path,
-                 rm.attachment_type as reply_attachment_type,
-                 rm.attachment_name as reply_attachment_name,
-                 rm.attachment_size as reply_attachment_size`;
-    }
-
-    query += `
-      FROM messages m
-      LEFT JOIN messages rm ON m.id = rm.reply_to
-      WHERE m.recipient_type = 'admin'
+      SELECT *
+      FROM messages
+      WHERE recipient_type = 'admin'
+         OR sender_id = 'admin'
     `;
     const params = [];
 
     if (filters.sender_type) {
-      query += ' AND m.sender_type = ?';
-      params.push(filters.sender_type);
+      query += ` AND (
+        (recipient_type = 'admin' AND sender_type = ?)
+        OR (sender_id = 'admin' AND recipient_type = ?)
+      )`;
+      params.push(filters.sender_type, filters.sender_type);
     }
 
     if (filters.is_read !== undefined) {
-      query += ' AND m.is_read = ?';
+      query += ' AND is_read = ?';
       params.push(filters.is_read);
     }
 
-    if (filters.is_replied !== undefined) {
-      query += ' AND m.is_replied = ?';
-      params.push(filters.is_replied);
-    }
-
-    query += ' ORDER BY m.created_at DESC';
+    query += ' ORDER BY created_at DESC';
 
     const [rows] = await pool.execute(query, params);
     return rows;
@@ -73,38 +48,10 @@ export const findAllForAdmin = async (filters = {}) => {
  */
 export const findById = async (id) => {
   try {
-    // Check if attachment columns exist
-    const [columns] = await pool.execute(
-      `SELECT COLUMN_NAME 
-       FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = DATABASE() 
-       AND TABLE_NAME = 'messages' 
-       AND COLUMN_NAME IN ('attachment_path', 'attachment_type', 'attachment_name', 'attachment_size')`
+    const [rows] = await pool.execute(
+      'SELECT * FROM messages WHERE id = ?',
+      [id]
     );
-    const hasAttachmentColumns = columns.length > 0;
-
-    let query = `
-      SELECT m.*, 
-             rm.message as reply_message,
-             rm.created_at as reply_created_at,
-             rm.sender_name as reply_sender_name
-    `;
-
-    // Only include attachment columns if they exist
-    if (hasAttachmentColumns) {
-      query += `, rm.attachment_path as reply_attachment_path,
-                 rm.attachment_type as reply_attachment_type,
-                 rm.attachment_name as reply_attachment_name,
-                 rm.attachment_size as reply_attachment_size`;
-    }
-
-    query += `
-       FROM messages m
-       LEFT JOIN messages rm ON m.id = rm.reply_to
-       WHERE m.id = ?
-    `;
-
-    const [rows] = await pool.execute(query, [id]);
     return rows.length > 0 ? rows[0] : null;
   } catch (error) {
     throw new Error(`Database error: ${error.message}`);
@@ -118,16 +65,6 @@ export const findById = async (id) => {
  */
 export const create = async (messageData) => {
   try {
-    // Check if attachment columns exist
-    const [columns] = await pool.execute(
-      `SELECT COLUMN_NAME 
-       FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = DATABASE() 
-       AND TABLE_NAME = 'messages' 
-       AND COLUMN_NAME IN ('attachment_path', 'attachment_type', 'attachment_name', 'attachment_size')`
-    );
-    const hasAttachmentColumns = columns.length > 0;
-
     const {
       sender_id,
       sender_name,
@@ -137,55 +74,34 @@ export const create = async (messageData) => {
       recipient_type = 'admin',
       subject,
       message,
-      reply_to = null,
       attachment_path = null,
       attachment_type = null,
       attachment_name = null,
       attachment_size = null
     } = messageData;
 
-    // Build INSERT query based on whether attachment columns exist
-    let query = `INSERT INTO messages (
-      sender_id, sender_name, sender_type,
-      recipient_id, recipient_name, recipient_type,
-      subject, message, reply_to`;
-    
-    let values = ` VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?`;
-    let params = [
-      sender_id,
-      sender_name,
-      sender_type,
-      recipient_id,
-      recipient_name,
-      recipient_type,
-      subject || null,
-      message,
-      reply_to || null
-    ];
-
-    // Add attachment columns only if they exist
-    if (hasAttachmentColumns) {
-      query += `, attachment_path, attachment_type, attachment_name, attachment_size`;
-      values += `, ?, ?, ?, ?`;
-      params.push(
-        attachment_path || null,
-        attachment_type || null,
-        attachment_name || null,
-        attachment_size || null
-      );
-    }
-
-    query += `)` + values + `)`;
-
-    const [result] = await pool.execute(query, params);
-
-    // If this is a reply, update the original message
-    if (reply_to) {
-      await pool.execute(
-        'UPDATE messages SET is_replied = TRUE WHERE id = ?',
-        [reply_to]
-      );
-    }
+    const [result] = await pool.execute(
+      `INSERT INTO messages (
+        sender_id, sender_name, sender_type,
+        recipient_id, recipient_name, recipient_type,
+        subject, message,
+        attachment_path, attachment_type, attachment_name, attachment_size
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        sender_id,
+        sender_name,
+        sender_type,
+        recipient_id || null,
+        recipient_name || null,
+        recipient_type,
+        subject || null,
+        message,
+        attachment_path,
+        attachment_type,
+        attachment_name,
+        attachment_size
+      ]
+    );
 
     return await findById(result.insertId);
   } catch (error) {
@@ -272,13 +188,9 @@ export const getUnreadCount = async () => {
 export const findBySender = async (senderId, senderType) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT m.*, 
-              rm.message as reply_message,
-              rm.created_at as reply_created_at
-       FROM messages m
-       LEFT JOIN messages rm ON m.id = rm.reply_to
-       WHERE m.sender_id = ? AND m.sender_type = ?
-       ORDER BY m.created_at DESC`,
+      `SELECT * FROM messages
+       WHERE sender_id = ? AND sender_type = ?
+       ORDER BY created_at DESC`,
       [senderId, senderType]
     );
     return rows;

@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
 import './AnnouncementForm.css';
 
-/**
- * Announcement Form Component
- * Used for both creating and editing announcements
- */
 const AnnouncementForm = ({ announcement, onClose, onSubmit, isEditing = false, viewOnly = false }) => {
   const [formData, setFormData] = useState({
     title: '',
@@ -23,7 +19,6 @@ const AnnouncementForm = ({ announcement, onClose, onSubmit, isEditing = false, 
     { id: 'transport_manager', label: 'Transport Manager' }
   ];
 
-  // Populate form if editing or viewing
   useEffect(() => {
     if (announcement && (isEditing || viewOnly)) {
       setFormData({

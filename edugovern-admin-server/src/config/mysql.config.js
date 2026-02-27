@@ -4,8 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
 
-// Note: dotenv should already be loaded in server.js before this module is imported
-// But we'll try to load it here as a fallback if needed
+
 if (!process.env.DB_PASSWORD) {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
@@ -13,13 +12,10 @@ if (!process.env.DB_PASSWORD) {
   
   if (existsSync(envPath)) {
     dotenv.config({ path: envPath });
-    console.log('⚠️  Fallback: Loaded .env from mysql.config.js');
+    console.log(' Fallback: Loaded .env from mysql.config.js');
   }
 }
 
-// Validate required environment variables
-// Note: XAMPP MySQL may have empty password by default
-// If DB_PASSWORD is empty string, MySQL will try to connect without password
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -27,24 +23,23 @@ const dbConfig = {
   database: process.env.DB_NAME || 'edugovern',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  timezone: '+00:00', // Force UTC timezone to prevent date conversion issues
+  dateStrings: true   // Return dates as strings instead of Date objects
 };
 
 // Log configuration (without password) for debugging
-console.log('📋 Database Configuration:');
+console.log('   Database Configuration:');
 console.log(`   Host: ${dbConfig.host}`);
 console.log(`   User: ${dbConfig.user}`);
 console.log(`   Database: ${dbConfig.database}`);
 console.log(`   Password: ${dbConfig.password ? '***' : 'NOT SET'}`);
 console.log(`   DB_PASSWORD from env: ${process.env.DB_PASSWORD ? 'SET' : 'NOT SET'}`);
 
-// Create MySQL connection pool
 const pool = mysql.createPool(dbConfig);
 
-// Create database if it doesn't exist
 export const initializeDatabase = async () => {
   try {
-    // First, connect without specifying database
     const tempConfig = {
       host: dbConfig.host,
       user: dbConfig.user,
@@ -64,14 +59,12 @@ export const initializeDatabase = async () => {
     // Create admins table
     await connection.execute(`USE \`${dbConfig.database}\``);
     
-    // Drop and recreate table to ensure correct structure
     try {
       await connection.execute(`DROP TABLE IF EXISTS admins`);
     } catch (e) {
-      // Ignore errors
+      
     }
     
-    // Create admins table with correct structure (including password reset fields)
     await connection.execute(`
       CREATE TABLE admins (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -85,7 +78,6 @@ export const initializeDatabase = async () => {
     `);
     console.log(' Admins table created successfully');
     
-    // Create students table
     try {
       await connection.execute(`DROP TABLE IF EXISTS students`);
     } catch (e) {
@@ -122,7 +114,104 @@ export const initializeDatabase = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
-    console.log('✅ Students table created successfully');
+    console.log(' Students table created successfully');
+
+    try {
+      await connection.execute(`CREATE TABLE IF NOT EXISTS buses (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        bus_number VARCHAR(50) NOT NULL UNIQUE,
+        registration_number VARCHAR(50) NOT NULL UNIQUE,
+        driver_name VARCHAR(255) NULL,
+        driver_contact VARCHAR(20) NULL,
+        route_name VARCHAR(255) NULL,
+        capacity INT NULL,
+        insurance_expiry DATE NULL,
+        fc_expiry DATE NULL,
+        permit_expiry DATE NULL,
+        images TEXT NULL,
+        status ENUM('Active', 'Inactive', 'Under Maintenance') DEFAULT 'Active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+      console.log(" Buses table verified/created (includes 'images' column)");
+
+      try {
+        await connection.execute(`ALTER TABLE buses ADD COLUMN IF NOT EXISTS images TEXT NULL`);
+      } catch (e) {
+        try {
+          await connection.execute(`ALTER TABLE buses ADD COLUMN images TEXT NULL`);
+        } catch (err) {
+        }
+      }
+    } catch (e) {
+      console.error('Bus table check/create error:', e.message);
+    }
+
+    // Create exams table if it doesn't exist
+    try {
+      // First check if classes and subjects tables exist
+      const [tables] = await connection.execute(`
+        SELECT TABLE_NAME 
+        FROM information_schema.TABLES 
+        WHERE TABLE_SCHEMA = ? 
+        AND TABLE_NAME IN ('classes', 'subjects')
+      `, [dbConfig.database]);
+      
+      const tableNames = tables.map(t => t.TABLE_NAME);
+      
+      // Create classes table if it doesn't exist
+      if (!tableNames.includes('classes')) {
+        await connection.execute(`
+          CREATE TABLE IF NOT EXISTS classes (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(50) NOT NULL UNIQUE,
+            display_order INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        console.log(' Classes table created');
+      }
+      
+      // Create subjects table if it doesn't exist
+      if (!tableNames.includes('subjects')) {
+        await connection.execute(`
+          CREATE TABLE IF NOT EXISTS subjects (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(100) NOT NULL,
+            class_id INT NOT NULL,
+            display_order INT DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+            INDEX idx_class_id (class_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        console.log(' Subjects table created');
+      }
+      
+      // Now create exams table
+      await connection.execute(`CREATE TABLE IF NOT EXISTS exams (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        class_id INT NOT NULL,
+        subject_id INT NULL,
+        exam_type VARCHAR(50) NOT NULL DEFAULT 'Assignment',
+        exam_date DATE NULL,
+        max_marks DECIMAL(5,2) DEFAULT 100.00,
+        description TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+        FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE SET NULL,
+        INDEX idx_class_id (class_id),
+        INDEX idx_subject_id (subject_id),
+        INDEX idx_exam_date (exam_date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+      console.log(' Exams table verified/created');
+    } catch (e) {
+      console.error('Exams table check/create error:', e.message);
+      console.error('Error details:', e);
+    }
     
     connection.release();
     await tempPool.end();
@@ -133,10 +222,8 @@ export const initializeDatabase = async () => {
   }
 };
 
-// Test database connection
 export const testConnection = async () => {
   try {
-    // First initialize database
     await initializeDatabase();
     
     // Then test the actual connection with database

@@ -1,0 +1,760 @@
+================================================================================
+        EduGovern - Academic Management System
+        PROJECT WORK SUMMARY REPORT
+================================================================================
+Date        : February 2026
+Project     : EduGovern - Academic Management System
+Modules     : Admin Module + Staff (Faculty) Module + Student Module
+Tech Stack  : React (Vite), Node.js / Express, MySQL, Cloudinary,
+              JWT Authentication, Recharts (Data Visualization)
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 1 : SYSTEM ARCHITECTURE OVERVIEW
+────────────────────────────────────────────────────────────────────────────────
+
+EduGovern is a full-stack web application built with:
+
+  Frontend  : React (Vite), React Router, Axios, Recharts
+  Backend   : Node.js, Express.js, JWT Authentication Middleware
+  Database  : MySQL (raw queries, no ORM)
+  Storage   : Cloudinary (assignment file attachments)
+  Auth      : JWT-based token authentication with role-based access
+               (admin / staff / student roles protected via middleware)
+
+The application is split into two separate portals:
+
+  1. Admin Portal          (localhost:5173) — Managed by school administration
+  2. Staff/Student Portal  (localhost:5174) — Used by teachers and students
+
+Both portals share a single MySQL database ("edugovern") and communicate
+with their respective backend servers via REST APIs.
+
+Key database tables:
+  students, classes, sections, subjects, exams, student_marks,
+  faculty (staff), announcements, messages, homework_assignments,
+  homework_submissions, feedback, requests, transport (buses, maintenance),
+  admin
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 2 : DATABASE CHANGES
+────────────────────────────────────────────────────────────────────────────────
+
+2.1  Removed exam_name column from exams table
+     ─────────────────────────────────────────
+     Problem  : The exams table had both exam_name and exam_type columns,
+                causing redundancy.
+     Solution : Removed exam_name entirely and made exam_type the sole
+                identifier for an exam.
+
+     Steps taken:
+       • Created migration script:
+           database/remove-exam-name-use-exam-type.sql
+         This script:
+           1. Backfills exam_type from exam_name where exam_type was empty
+           2. Sets exam_type NOT NULL with DEFAULT 'Assignment'
+           3. Drops the exam_name column
+
+       • Updated schema definition files:
+           - database/create-exams-table.sql
+           - database/create-exams-table-standalone.js
+           - src/config/mysql.config.js
+
+2.2  student_marks table (faculty-entered marks)
+     ────────────────────────────────────────────
+     The faculty portal uses a student_marks table with columns:
+       id, student_id, staff_id, subject, exam_type, marks,
+       max_marks, exam_date, created_at, updated_at
+
+     This table is populated by teaching staff through the Staff Portal
+     and is read by both the Admin Portal and Student Portal for progress
+     analytics.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 3 : ADMIN MODULE — FEATURES IMPLEMENTED
+────────────────────────────────────────────────────────────────────────────────
+
+3.1  ADMIN PORTAL OVERVIEW
+     ──────────────────────
+     - JWT-based login for admin accounts.
+     - Sidebar navigation with the following sections:
+         Dashboard, Students, Teachers, Announcement, Transport,
+         Messages, Request/Approval, Report Generate, Academic Setup,
+         Student Progress, Logout.
+
+
+3.2  ACADEMIC SETUP MODULE
+     ──────────────────────
+     File: src/pages/academicSetup/AdminAcademicSetup.jsx
+     File: src/pages/academicSetup/AdminAcademicSetup.css
+
+     A. Exam Type Input Change
+        • Changed the Exam Type field from a fixed dropdown
+          (Assignment, Midterm, Quarterly, Final, Unit Test, Practical)
+          to a free-text input field.
+        • Admin can now type any custom exam type (e.g. "Quarterly Test 1").
+        • Input has placeholder: "e.g. Midterm, Final, Assignment".
+        • Validation trims whitespace before saving.
+
+     B. Card-Based Layout for Subjects, Sections, and Exams
+        • All three tabs redesigned from plain tables to a card-based
+          layout grouped by class.
+        • Each class gets its own card showing:
+            - Class name and item count
+            - List of items (subject name / section name / exam details)
+            - Edit and Remove buttons per item
+        • useMemo hooks used for: subjectsByClass, sectionsByClass,
+          examsByClass, classOrderMap
+        • Empty state shown when no items exist.
+        • New CSS classes added:
+            .academic-empty-state, .subjects-cards-grid,
+            .subject-class-card, .academic-card-item-subtitle
+
+
+3.3  STUDENT PROGRESS MODULE (NEW)
+     ─────────────────────────────
+     Files:
+       src/pages/studentProgress/AdminStudentProgress.jsx
+       src/pages/studentProgress/AdminStudentProgress.css
+       src/routes/AdminRoutes.jsx  (route added)
+       src/components/layout/Sidebar.jsx  (menu item added)
+       src/services/marks.service.js  (new service)
+
+     A. Class & Section Selection
+        • Dropdown for Class — populated from classes DB table
+          (shows all classes: PreKG, LKG, UKG, 1–12).
+        • Dropdown for Section — populated from sections DB table
+          (only sections belonging to selected class).
+        • Compare Section dropdown — appears when class has multiple
+          sections; allows side-by-side section comparison.
+        • Context badge showing current selection (e.g. Class 10 › B vs C).
+        • Prompt screens guide admin when no class/section is selected.
+        • Class/section lists driven by DB tables, not student records —
+          ensures all classes appear even if no students are enrolled.
+
+     B. Class Overview Tab
+        • Ranked student list (left panel) with search functionality.
+        • Horizontal bar chart — student average scores with section
+          average reference line.
+        • Exam Progress Timeline (below bar chart):
+            - Scrollable exam cards (one per exam) showing:
+                exam type, subject, date, class avg %, max marks.
+            - Line chart showing class average % across all exams
+              over time (sorted by exam date).
+            - Smart label deduplication: if same exam type+subject
+              appears on multiple dates, date is appended to label
+              (e.g. "Midterm · English (2026-02-17)").
+
+     C. Section vs Section Compare Tab
+        • Appears when a Compare Section is selected.
+        • Summary cards for each section (avg %, student count).
+        • VS panel showing which section leads and by how much.
+        • Side-by-side ranked student lists for both sections.
+        • Grouped bar chart comparing both sections' student averages.
+
+     D. Individual Student Tab
+        • Activated by clicking any student in the ranked list.
+        • Shows student rank, name, class-section, average %.
+        • Diff badge: shows how student compares to section average
+          (e.g. +5.3% vs section avg).
+        • Subject-wise average bar chart.
+        • Progress trend area chart (by exam date).
+        • Subject strength radar chart (shown when 3+ subjects).
+        • "Compare with" dropdown — lists all students in same class
+          across any section.
+
+     E. Student vs Student Compare Tab
+        • Summary cards for both students with rank badges.
+        • VS panel showing who leads and by how much.
+        • Subject-wise grouped bar chart.
+        • Progress trend line chart (overlaid).
+        • Subject strength radar chart (overlaid).
+
+     F. Real Marks Integration
+        • Fetches real marks from student_marks table via /api/marks API.
+        • On page load: fetches marks for all students in batch,
+          stored in allMarksMap[student_id].
+        • Exam timeline fetched per class via GET /api/marks/timeline.
+        • All charts, averages, and rankings use actual obtained marks.
+
+     G. Statistics Header
+        • Shows: Students count, With Exams count, Section Average %.
+
+
+3.4  BACKEND — NEW MARKS API (edugovern-admin-server)
+     ──────────────────────────────────────────────────
+     Created three new files:
+
+     src/modules/marks/marks.model.js
+       • findAllMarks({ studentId, className })
+           — Fetches all marks for a student or class from student_marks
+             table with JOIN to students table.
+       • findMarksSummaryByClass(className, sectionName)
+           — Returns per-student average percentage for a class/section.
+       • findExamTimelineByClass(className)
+           — Returns per-exam class average grouped by
+             exam_date + exam_type + subject, sorted by date.
+
+     src/modules/marks/marks.controller.js
+       • GET /api/marks              — fetch marks by studentId or class
+       • GET /api/marks/summary      — class/section student averages
+       • GET /api/marks/timeline     — exam progress timeline for a class
+
+     src/modules/marks/marks.routes.js
+       • All three routes protected by authenticate middleware.
+
+     src/app.js
+       • Registered: app.use('/api/marks', marksRoutes)
+
+     src/modules/academic/academic.model.js
+       • Removed exam_name from createExam() and updateExam() functions.
+       • Changed ORDER BY from e.exam_name ASC to e.exam_type ASC.
+       • exam_type now defaults to 'Assignment' if not provided.
+
+
+3.5  ROUTING & NAVIGATION
+     ──────────────────────
+     • AdminRoutes.jsx — Added protected route:
+         /admin/student-progress → <AdminStudentProgress />
+     • Sidebar.jsx — Added menu item "Student Progress" (id: 10)
+         positioned before Logout.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 4 : STAFF (FACULTY) MODULE — FEATURES IMPLEMENTED
+────────────────────────────────────────────────────────────────────────────────
+
+4.1  AUTHENTICATION
+     ─────────────
+     - JWT-based login for staff accounts.
+     - Token stored in localStorage, attached to all API requests via
+       Axios interceptor.
+     - Protected routes redirect unauthenticated users to login.
+
+
+4.2  STAFF DASHBOARD
+     ────────────────
+     - Overview dashboard showing class summary statistics.
+     - Tabbed sidebar navigation with the following sections:
+         Dashboard, Students, Mark Entry, Assignment, Announcement,
+         Messages, View Student Progress, Request/Approval, Feedback.
+
+
+4.3  STUDENTS PAGE
+     ──────────────
+     - Displays all students in the faculty's assigned class and section.
+     - Search/filter functionality by student name or ID.
+     - Shows student details: name, roll number, class, section.
+
+
+4.4  MARK ENTRY MODULE
+     ──────────────────
+     - Two-panel layout: student list (left) + mark entry form (right).
+     - Staff can select a student and enter marks for any subject and
+       exam type.
+     - Features:
+         * Add new marks (subject, exam type, marks scored, max marks, date).
+         * Edit existing marks with inline form pre-fill.
+         * Delete marks with inline confirmation (Yes/No).
+         * UPSERT logic: saving a duplicate subject+exam_type overwrites
+           the existing mark with a warning shown to the staff.
+         * Duplicate warning banner shown before overwrite.
+         * Marks grouped by exam type in a table view.
+         * Percentage badge shown per mark row.
+         * Cancel Edit button resets form cleanly.
+     - Backend:
+         * getStudentsByClass, getStudentMarks, createMark, updateMark,
+           deleteMark, getSubjectsByClass, getExamTypesByClass APIs.
+         * All exam_date fields returned using DATE_FORMAT('%Y-%m-%d')
+           to prevent timezone shift bugs.
+         * Collation fix: deleteMark and updateMark refactored from
+           3-table JOIN to two separate queries to resolve MySQL
+           "Illegal mix of collations" error.
+
+
+4.5  ASSIGNMENT MODULE
+     ──────────────────
+     - Staff can create, view, and delete assignments for their class.
+     - Assignment types: Assignment, Activity, Project,
+       Vacation/Holiday, Other.
+     - Each assignment card shows:
+         * Type badge (color-coded by type).
+         * Title, class/section, due date.
+         * Submitted count and total student count chips.
+         * Delete button (outlined red style).
+     - Features:
+         * Create Assignment modal with title, description, type, due date,
+           and file attachments (PDF/images via Cloudinary).
+         * View Submissions modal showing all student submissions with:
+             - Roll number (styled blue badge).
+             - Student name.
+             - Submission status, submitted date, notes, and file links.
+         * Extend Due Date: staff can set a new due date/time for any
+           assignment directly from the submissions modal.
+         * Delete Assignment: confirmation box inside modal; deletes
+           assignment and all associated student submissions.
+         * Expired badge shown on overdue assignments.
+     - Backend:
+         * createAssignment, getAssignmentsByStaff, getAssignmentById,
+           getSubmissionsByAssignment, extendDueDate, deleteAssignment APIs.
+         * submitHomework checks due_date and returns 403 PAST_DUE if
+           submission attempted after deadline.
+         * CORS fix: PATCH method added to allowed methods in app.js
+           to support extendDueDate API calls.
+     - UI Style: Matches Mark Entry page style (white background, border,
+       card container with inner grid).
+
+
+4.6  ANNOUNCEMENT MODULE
+     ─────────────────────
+     - Staff can view all published announcements relevant to faculty.
+     - Announcements fetched from backend filtered by recipient = "faculty".
+     - Features:
+         * Search/filter announcements by title or content.
+         * Card grid layout showing title, content preview, posted date,
+           and scheduled time (if any).
+         * Total count shown in controls row.
+     - Staff cannot create or delete announcements (admin-only action).
+     - UI Style: Matches Mark Entry page style.
+
+
+4.7  VIEW STUDENT PROGRESS MODULE
+     ──────────────────────────────
+     - Staff can view academic progress charts for all students in their class.
+     - Features:
+         * Individual Student View:
+             - Subject-wise average bar chart (horizontal).
+             - Progress trend area chart (by exam date).
+             - Interactive tooltips showing subject name, marks, and
+               percentage on hover.
+             - Reference line showing class average.
+         * Class Overview:
+             - Bar chart showing all students' average scores.
+             - Students displayed in descending order (highest at top).
+         * Compare Students:
+             - Select two students and compare their progress trend
+               on a single line chart.
+             - Separate tooltip blocks per student showing subject breakdown.
+         * RadarChart (Subject Strength) removed as per requirement.
+     - Date Fix: All exam_date values formatted server-side using
+       DATE_FORMAT to prevent UTC midnight timezone shift in charts.
+     - Backend: studentprogressviewController.js with dedicated routes.
+
+
+4.8  FEEDBACK MODULE
+     ─────────────────
+     - Staff can submit feedback for individual students in their class.
+     - Student list shown in sidebar with name and roll number only
+       (student ID removed from display).
+     - Feedback categories: Academic (Exams/Marks), Behavioral,
+       General Remark.
+     - Free-text comments field with submit button.
+     - Success/error messages shown after submission.
+
+
+4.9  MESSAGES MODULE
+     ─────────────────
+     - Staff can send and receive messages within the system.
+     - Message list with sender/receiver details and timestamps.
+
+
+4.10 REQUEST / APPROVAL MODULE
+     ───────────────────────────
+     - Staff can view and manage student requests/approvals.
+     - Approve or reject requests with status updates.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 5 : STUDENT MODULE — FEATURES IMPLEMENTED
+────────────────────────────────────────────────────────────────────────────────
+
+5.1  STUDENT DASHBOARD
+     ──────────────────
+     - Tabbed sidebar navigation with the following sections:
+         Dashboard, My Progress, Mark View, Assignment, Announcement,
+         Messages, Request/Approval, Feedback Received.
+
+
+5.2  MARK VIEW
+     ──────────
+     File: client/src/pages/student/marks/StudentMarkView.jsx
+     File: client/src/pages/student/marks/StudentMarkView.css
+
+     - Students can view all their recorded exam marks.
+     - Stat cards: Total Exams, Subjects count, Average percentage.
+     - Subject and Exam Type filter dropdowns.
+     - Marks table with: Subject, Exam Type, Marks, Percentage,
+       Grade, Exam Date, Faculty columns.
+     - Grade badges color-coded by performance (A+, A, B+, B, C, D, F).
+     - All SVG icons removed from stat cards, error banner, and
+       empty state as per requirement.
+     - Corresponding unused CSS (.stat-icon, .empty-state svg) cleaned up.
+
+
+5.3  MY PROGRESS (STUDENT PROGRESS CHART)
+     ──────────────────────────────────────
+     File: client/src/pages/student/progress/StudentProgressChart.jsx
+
+     - A dedicated progress analytics page for the logged-in student only.
+     - Features:
+         * Exam Type Filter Bar:
+             - Pill buttons to filter all charts by exam type
+               (All, Midterm, Final, etc.).
+             - Auto-generated from the student's actual mark data.
+             - Filters stat cards, bar chart, and trend chart simultaneously.
+         * Stat Cards:
+             - Total Exams, Subjects count, Overall Average %, Grade.
+             - Average label updates to show selected exam type name.
+         * Exam Comparison (shown at top, always visible):
+             - Two dropdowns to select Exam A vs Exam B.
+             - Grouped horizontal bar chart comparing both exams
+               per subject side by side (blue = Exam A, amber = Exam B).
+             - Score difference table showing:
+                 Subject | Exam A % | Exam B % | Change (▲/▼/●)
+             - Change column color-coded: green (improved), red (declined),
+               grey (no change).
+             - Tooltip shows both scores and the difference.
+             - Shows message if fewer than 2 exam types available.
+         * Subject-wise Average Bar Chart:
+             - Horizontal bar chart showing average % per subject.
+             - Filtered by selected exam type.
+             - Reference line showing overall average.
+         * Progress Trend Area Chart:
+             - Area chart showing score trend over exam dates.
+             - Interactive tooltips showing subject-wise breakdown on hover.
+             - Reference line for average score.
+     - Data fetched from /students/my-marks (student's own marks only).
+
+
+5.4  ASSIGNMENT MODULE (STUDENT VIEW)
+     ───────────────────────────────────
+     - Students can view all assignments for their class.
+     - Features:
+         * Assignment list with type, title, due date, and status.
+         * Submit assignment with text note and file attachments.
+         * Update existing submission.
+         * Deadline enforcement:
+             - After due date, submission form is replaced with a
+               "Submission Closed" locked box with a message to
+               contact the teacher.
+             - "Closed" badge shown on overdue unsubmitted assignments.
+             - Countdown timer shown (e.g. "2h 30m left") for upcoming
+               deadlines.
+         * If staff extends the due date, student can submit again.
+
+
+5.5  ANNOUNCEMENT MODULE (STUDENT VIEW)
+     ─────────────────────────────────────
+     - Students can view all published announcements relevant to students.
+     - Announcements filtered by recipient = "student" / "students".
+     - Date range filter and search functionality.
+     - Card layout with title, content, and posted date.
+
+
+5.6  MESSAGES MODULE
+     ─────────────────
+     - Students can send and receive messages within the system.
+
+
+5.7  REQUEST / APPROVAL MODULE
+     ───────────────────────────
+     - Students can submit requests (leave, etc.) for staff approval.
+     - View status of submitted requests (pending/approved/rejected).
+
+
+5.8  FEEDBACK RECEIVED
+     ───────────────────
+     - Students can view feedback submitted by their teachers.
+     - Feedback displayed with category, comments, and date.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 6 : BACKEND API SUMMARY
+────────────────────────────────────────────────────────────────────────────────
+
+  ADMIN SERVER (edugovern-admin-server, port 5000)
+  ─────────────────────────────────────────────────
+  Route Prefix              Endpoints
+  ────────────────────────  ─────────────────────────────────────────────────
+  /api/admin                POST /login, GET /profile
+  /api/students             GET / (all), GET /:id, POST /, PUT /:id,
+                            DELETE /:id
+  /api/academic/classes     GET, POST, PUT /:id, DELETE /:id
+  /api/academic/sections    GET, POST, PUT /:id, DELETE /:id
+  /api/academic/subjects    GET, POST, PUT /:id, DELETE /:id
+  /api/academic/exams       GET, POST, PUT /:id, DELETE /:id
+  /api/marks                GET /?studentId=&class=
+  /api/marks/summary        GET /?class=&section=
+  /api/marks/timeline       GET /?class=
+  /api/faculty              GET, POST, PUT /:id, DELETE /:id
+  /api/announcements        GET, POST, DELETE /:id
+  /api/messages             GET, POST
+  /api/transport            GET, POST (buses & maintenance)
+  /api/admin/reports        GET (various report types)
+  /api/admin/requests       GET, PATCH /:id
+
+
+  STAFF/STUDENT SERVER (EduGovern_StaffAndStudent, port varies)
+  ──────────────────────────────────────────────────────────────
+  Controller / Route                   Endpoints
+  ───────────────────────────────────  ─────────────────────────────────────
+  authController / authRoutes          POST /login (staff & student)
+  studentController / studentRoutes    GET    /students/by-class
+                                       GET    /students/:id/marks
+                                       POST   /students/marks
+                                       PUT    /students/marks/:id
+                                       DELETE /students/marks/:id
+                                       GET    /students/my-marks
+                                       GET    /students/subjects/:class
+                                       GET    /students/exam-types/:class
+  homeworkController / homeworkRoutes  POST   /homework
+                                       GET    /homework/staff
+                                       GET    /homework/:id
+                                       GET    /homework/:id/submissions
+                                       POST   /homework/:id/submit
+                                       PATCH  /homework/:id/extend-due-date
+                                       DELETE /homework/:id
+  announcementController               GET    /announcements/published
+                                       GET    /announcements/student
+                                       DELETE /announcements/:id
+  feedbackController                   POST   /feedback
+                                       GET    /feedback/student/:id
+  messageController                    GET/POST /messages
+  requestController                    GET/POST/PATCH /requests
+  facultyController                    GET    /faculty/profile
+  studentprogressviewController        GET    /progress/class/:class
+                                       GET    /progress/student/:id
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 7 : BUGS FIXED
+────────────────────────────────────────────────────────────────────────────────
+
+  #   Bug Description                          Fix Applied
+  ──────────────────────────────────────────────────────────────────────────
+  1   MySQL "Illegal mix of collations"         Refactored deleteMark and
+      error when deleting marks                 updateMark from 3-table JOIN
+                                                to two separate queries to
+                                                avoid cross-table collation
+                                                comparison.
+
+  2   Incorrect "already exists" alert          Removed auto-selection of
+      shown for other students in               default subject/exam type on
+      Mark Entry page                           student selection. Added
+                                                !marksLoading guard to
+                                                existingMarkForForm check.
+
+  3   Inaccurate dates in progress              All exam_date SELECT queries
+      trend chart (timezone shift)              now use DATE_FORMAT(exam_date,
+                                                '%Y-%m-%d'). Frontend uses
+                                                string-split parsing instead
+                                                of new Date() to avoid UTC
+                                                midnight shift.
+
+  4   CORS error: PATCH method blocked          Added 'PATCH' to the
+      for extend-due-date API                   corsOptions.methods array
+                                                in server/app.js.
+
+  5   Admin Student Progress showing            Replaced placeholder logic
+      100% for all students (incorrect          (max_marks used as obtained)
+      marks)                                    with real data fetched from
+                                                student_marks table via
+                                                /api/marks API.
+
+  6   Student Progress class dropdown           Changed class/section lists
+      only showing classes that have            to be populated from classes
+      enrolled students                         and sections DB tables
+                                                directly, not from student
+                                                records.
+
+  7   Exam Progress Timeline showing            Added smart label
+      duplicate labels for same                 deduplication: if same
+      exam type on different dates              type+subject appears more
+                                                than once, date is appended
+                                                to the label automatically.
+
+  8   Unknown column 'e.exam_name' in           Removed exam_name from all
+      ORDER BY clause after migration           backend queries; updated
+                                                ORDER BY to use e.exam_type.
+
+  9   recharts library not installed            Executed npm install recharts
+                                                in the admin client directory.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 8 : UI / STYLING DECISIONS
+────────────────────────────────────────────────────────────────────────────────
+
+  - All faculty pages (Mark Entry, Assignment, Announcement) share a
+    consistent design language:
+      * White page background with 0.5px border and 10px border-radius.
+      * 22px/600 page title.
+      * Controls row with bottom border separator.
+      * Inner white card (border: 1px solid #e8e8e8, border-radius: 8px,
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06)) wrapping content.
+      * Individual item cards: #fafafa background, 12px border-radius,
+        hover lift effect.
+
+  - Delete buttons use a consistent outlined style:
+      * Transparent background, red border (#fca5a5), red text (#ef4444).
+      * On hover: light red fill (#fef2f2), darker red border.
+
+  - Assignment type badges are color-coded:
+      * Assignment = Blue, Activity = Purple, Project = Cyan,
+        Vacation = Amber, Other = Grey.
+
+  - Admin Student Progress charts use:
+      * Blue (#2563eb) for student scores.
+      * Indigo (#6366f1) for Section A in comparisons.
+      * Pink (#ec4899) for Section B in comparisons.
+      * Amber (#f59e0b) for average reference lines.
+      * Dark tooltip (#1e293b background) with subject breakdown on hover.
+
+  - Academic Setup cards:
+      * Grouped by class, each class in its own card.
+      * Card header shows class name + item count.
+      * Items listed with Edit (blue) and Remove (red) action buttons.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 9 : KEY DESIGN PRINCIPLES FOLLOWED
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Role-Based Access Control (RBAC):
+       Admin, staff, and students see only their own relevant data.
+       All API routes protected by JWT middleware.
+
+  2. Data Integrity:
+       UPSERT logic prevents duplicate marks.
+       Cascade delete for assignments removes all submissions.
+       Deadline enforcement prevents late submissions.
+       exam_type NOT NULL with default prevents empty exam records.
+
+  3. Timezone Safety:
+       All date values handled as YYYY-MM-DD strings server-side.
+       Frontend parses dates by string-splitting, not new Date() constructor,
+       to avoid UTC midnight timezone shift bugs.
+
+  4. Consistent UI/UX:
+       All pages share the same design system (colors, typography, spacing).
+       Interactive feedback: loading spinners, success/error messages,
+       confirmation dialogs before destructive actions.
+
+  5. Responsive Design:
+       All pages adapt to smaller screen sizes using CSS media queries.
+
+  6. Clean Code:
+       Separate service files for each API domain.
+       Reusable helper functions (safeDateStr, formatDateLabel, getGrade,
+       buildSubjectMap, buildTrendMap, buildCompareData, classOrder).
+       useMemo used throughout for expensive derived data computations.
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 10 : FILES CREATED / MODIFIED — COMPLETE LIST
+────────────────────────────────────────────────────────────────────────────────
+
+  ADMIN SERVER (edugovern-admin-server)
+  ──────────────────────────────────────
+  NEW:
+    database/remove-exam-name-use-exam-type.sql
+    src/modules/marks/marks.model.js
+    src/modules/marks/marks.controller.js
+    src/modules/marks/marks.routes.js
+
+  MODIFIED:
+    database/create-exams-table.sql
+    database/create-exams-table-standalone.js
+    src/config/mysql.config.js
+    src/modules/academic/academic.model.js
+    src/app.js
+
+  ADMIN CLIENT (edugovern-admin-client)
+  ──────────────────────────────────────
+  NEW:
+    src/pages/studentProgress/AdminStudentProgress.jsx
+    src/pages/studentProgress/AdminStudentProgress.css
+    src/services/marks.service.js
+
+  MODIFIED:
+    src/pages/academicSetup/AdminAcademicSetup.jsx
+    src/pages/academicSetup/AdminAcademicSetup.css
+    src/routes/AdminRoutes.jsx
+    src/components/layout/Sidebar.jsx
+    package.json  (recharts added)
+
+  STAFF/STUDENT CLIENT (EduGovern_StaffAndStudent/client)
+  ────────────────────────────────────────────────────────
+  NEW:
+    src/pages/faculty/studentprogressview/StudentProgressView.jsx
+    src/pages/faculty/studentprogressview/StudentProgressView.css
+    src/pages/student/progress/StudentProgressChart.jsx
+    src/pages/student/progress/StudentProgressChart.css
+    src/services/markService.js
+
+  MODIFIED:
+    src/pages/student/marks/StudentMarkView.jsx
+    src/pages/student/marks/StudentMarkView.css
+    src/pages/faculty/markEntry/MarkEntry.jsx
+    src/pages/faculty/homework/Homework.jsx
+    src/pages/student/StudentHomework.jsx
+    server/app.js  (CORS PATCH fix)
+    server/controllers/studentController.js
+    server/controllers/homeworkController.js
+    server/controllers/studentprogressviewController.js
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 11 : TECHNOLOGIES & PACKAGES USED
+────────────────────────────────────────────────────────────────────────────────
+
+  Frontend Packages:
+    - react, react-dom               UI framework
+    - react-router-dom               Client-side routing
+    - axios                          HTTP client for API calls
+    - recharts                       Data visualization / charts
+
+  Backend Packages:
+    - express                        Web framework
+    - mysql2                         MySQL database driver
+    - jsonwebtoken                   JWT authentication
+    - bcryptjs                       Password hashing
+    - multer                         File upload middleware
+    - cloudinary                     Cloud file storage
+    - cors                           Cross-origin resource sharing
+    - dotenv                         Environment variable management
+
+  Database:
+    - MySQL                          Relational database
+    - Tables: students, staff, student_marks, homework_assignments,
+              homework_submissions, announcements, feedback,
+              messages, requests, subjects, exams, classes, sections,
+              transport (buses, maintenance), admin
+
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 12 : PENDING / FUTURE WORK
+────────────────────────────────────────────────────────────────────────────────
+
+  • A real marks entry system on the admin side (currently marks are
+    entered only through the Staff Portal by teachers).
+
+  • Attendance module — track and display daily attendance per student.
+
+  • Report generation for student progress (PDF export).
+
+  • Attendance module integration with progress view.
+
+  • Push notifications or alerts when student performance drops below
+    a threshold.
+
+  • Parent portal — allow parents to view their child's marks and progress.
+
+  • Bulk student import via CSV/Excel upload.
+
+================================================================================
+                              END OF REPORT
+================================================================================

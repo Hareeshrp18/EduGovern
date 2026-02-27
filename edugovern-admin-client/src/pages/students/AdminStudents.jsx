@@ -3,6 +3,8 @@ import './AdminStudents.css';
 import Sidebar from '../../components/layout/Sidebar';
 import StudentForm from '../../components/students/StudentForm';
 import { createStudent, getAllStudents, updateStudent, getStudentById } from '../../services/student.service.js';
+import { getClasses, getSections } from '../../services/academic.service.js';
+import { normalizeClassForCompare } from '../../utils/classCompare.js';
 
 /* Admin Students Page */
 const AdminStudents = () => {
@@ -17,29 +19,59 @@ const AdminStudents = () => {
   const [selectedSection, setSelectedSection] = useState('');
   const [showPromoteConfirm, setShowPromoteConfirm] = useState(false);
   const [promoteData, setPromoteData] = useState(null);
+  const [classes, setClasses] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [allSections, setAllSections] = useState([]);
 
-  // Fetch students on component mount
   useEffect(() => {
     fetchStudents();
   }, []);
 
-  // Filter students based on search, class, and section
-  // Students will only show when both class and section are selected
   useEffect(() => {
-    // Only filter if both class and section are selected
-    if (!selectedClass || !selectedSection) {
+    getClasses().then((data) => setClasses(Array.isArray(data) ? data : [])).catch(() => setClasses([]));
+  }, []);
+
+  useEffect(() => {
+    getSections().then((data) => setAllSections(Array.isArray(data) ? data : [])).catch(() => setAllSections([]));
+  }, []);
+
+  // Default to LKG when classes load and no class is selected yet
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      const lkgClass = classes.find((c) => normalizeClassForCompare(c.name) === 'lkg');
+      if (lkgClass) setSelectedClass(lkgClass.name);
+    }
+  }, [classes]);
+
+  useEffect(() => {
+    if (!selectedClass) {
+      setSections([]);
+      return;
+    }
+    const classId = classes.find((c) => normalizeClassForCompare(c.name) === normalizeClassForCompare(selectedClass))?.id;
+    if (!classId) {
+      setSections([]);
+      return;
+    }
+    getSections(classId).then((data) => setSections(Array.isArray(data) ? data : [])).catch(() => setSections([]));
+  }, [selectedClass, classes]);
+
+  // Filter students by class (and optional section), then sort by section order
+  useEffect(() => {
+    if (!selectedClass) {
       setFilteredStudents([]);
       return;
     }
 
-    let filtered = [...students];
+    // Match class by normalized value so "10th" (in DB) matches "10" (from Academic Setup dropdown)
+    const selectedClassNorm = normalizeClassForCompare(selectedClass);
+    let filtered = students.filter(student => normalizeClassForCompare(student.class) === selectedClassNorm);
 
-    // First filter by class and section (both required)
-    filtered = filtered.filter(student => 
-      student.class === selectedClass && student.section === selectedSection
-    );
+    if (selectedSection) {
+      filtered = filtered.filter(student => student.section === selectedSection);
+    }
 
-    // Then apply search filter if search term exists
+    // Apply search filter if search term exists
     if (searchTerm) {
       filtered = filtered.filter(student =>
         student.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -49,8 +81,20 @@ const AdminStudents = () => {
       );
     }
 
+    const sectionNames = [...new Set(sections.map((s) => s.name))];
+    filtered = [...filtered].sort((a, b) => {
+      const secA = (a.section || '').toString().toUpperCase();
+      const secB = (b.section || '').toString().toUpperCase();
+      const idxA = sectionNames.indexOf(secA);
+      const idxB = sectionNames.indexOf(secB);
+      if (idxA === -1 && idxB === -1) return (secA || '').localeCompare(secB || '');
+      if (idxA === -1) return 1;
+      if (idxB === -1) return -1;
+      return idxA - idxB;
+    });
+
     setFilteredStudents(filtered);
-  }, [students, searchTerm, selectedClass, selectedSection]);
+  }, [students, searchTerm, selectedClass, selectedSection, sections]);
 
   const fetchStudents = async () => {
     try {
@@ -91,12 +135,13 @@ const AdminStudents = () => {
     }
   };
 
+  const classOrder = classes.map((c) => c.name);
+
   const handlePromoteStudent = async (id) => {
     try {
       const student = await getStudentById(id);
       const currentClass = student.class;
-      const classOrder = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
-      const currentIndex = classOrder.indexOf(currentClass);
+      const currentIndex = classOrder.findIndex((c) => normalizeClassForCompare(c) === normalizeClassForCompare(currentClass));
       
       if (currentIndex === -1 || currentIndex === classOrder.length - 1) {
         setError('Cannot promote student. Already in highest class or invalid class.');
@@ -146,21 +191,17 @@ const AdminStudents = () => {
   };
 
   const handlePromoteAllStudents = () => {
-    // Check if both class and section are selected
     if (!selectedClass || !selectedSection) {
       setError('Please select both Class and Section to promote students.');
       return;
     }
 
-    // Check if there are students to promote
     if (filteredStudents.length === 0) {
       setError(`No students found in ${selectedClass} - ${selectedSection} to promote.`);
       return;
     }
 
-    // Get the next class
-    const classOrder = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th'];
-    const currentIndex = classOrder.indexOf(selectedClass);
+    const currentIndex = classOrder.findIndex((c) => normalizeClassForCompare(c) === normalizeClassForCompare(selectedClass));
     
     if (currentIndex === -1) {
       setError('Invalid class selected. Cannot promote students.');
@@ -256,21 +297,12 @@ const AdminStudents = () => {
               <select 
                 className="filter-btn"
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                onChange={(e) => { setSelectedClass(e.target.value); setSelectedSection(''); }}
               >
                 <option value="">Select Class</option>
-                <option value="1st">1st</option>
-                <option value="2nd">2nd</option>
-                <option value="3rd">3rd</option>
-                <option value="4th">4th</option>
-                <option value="5th">5th</option>
-                <option value="6th">6th</option>
-                <option value="7th">7th</option>
-                <option value="8th">8th</option>
-                <option value="9th">9th</option>
-                <option value="10th">10th</option>
-                <option value="11th">11th</option>
-                <option value="12th">12th</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
               </select>
               <select 
                 className="filter-btn"
@@ -278,11 +310,9 @@ const AdminStudents = () => {
                 onChange={(e) => setSelectedSection(e.target.value)}
               >
                 <option value="">Select Section</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="E">E</option>
+                {sections.map((s) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
               </select>
             </div>
             <div className="search-promote-section">
@@ -302,7 +332,7 @@ const AdminStudents = () => {
                 placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={!selectedClass || !selectedSection}
+                disabled={!selectedClass}
               />
             </div>
           </div>
@@ -314,18 +344,18 @@ const AdminStudents = () => {
           <section className="students-table-section">
             {loading ? (
               <div className="loading-message">Loading students...</div>
-            ) : !selectedClass || !selectedSection ? (
+            ) : !selectedClass ? (
               <div className="students-table-placeholder">
                 <p className="placeholder-message">
-                  Please select both <strong>Class</strong> and <strong>Section</strong> to view student details.
+                  Please select <strong>Class</strong> to view student details (listed in section order).
                 </p>
               </div>
             ) : filteredStudents.length === 0 ? (
               <div className="students-table-placeholder">
                 <p className="placeholder-message">
-                  {searchTerm 
-                    ? `No students found matching "${searchTerm}" in ${selectedClass} - ${selectedSection}.`
-                    : `No students found in ${selectedClass} - ${selectedSection}. Click "Add Student" to add a new student.`
+                  {searchTerm
+                    ? `No students found matching "${searchTerm}" in ${selectedClass}${selectedSection ? ` - ${selectedSection}` : ''}.`
+                    : `No students found in ${selectedClass}${selectedSection ? ` - ${selectedSection}` : ''}. Click "Add Student" to add a new student.`
                   }
                 </p>
               </div>
@@ -384,6 +414,8 @@ const AdminStudents = () => {
 
       {showForm && (
         <StudentForm
+              classes={classes}
+              sections={allSections}
           student={editingStudent}
           onClose={handleCloseForm}
           onSubmit={handleSubmitForm}

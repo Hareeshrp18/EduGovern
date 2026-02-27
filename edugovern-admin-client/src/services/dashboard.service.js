@@ -11,7 +11,6 @@ const apiClient = axios.create({
   }
 });
 
-// Add token to requests
 apiClient.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
@@ -20,9 +19,6 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-/**
- * Dashboard Service - API calls for dashboard statistics
- */
 
 /**
  * Get dashboard statistics

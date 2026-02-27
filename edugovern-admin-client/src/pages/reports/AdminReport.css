@@ -713,6 +713,13 @@
   font-weight: 600;
 }
 
+.maintenance-selection-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.4;
+}
+
 .selection-actions {
   display: flex;
   gap: 10px;

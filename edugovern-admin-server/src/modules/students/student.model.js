@@ -54,6 +54,53 @@ export const findByStudentId = async (studentId) => {
 };
 
 /**
+ * Find all students in a specific class
+ * @param {string} className - Class name
+ * @returns {Promise<Array>} List of students in the class
+ */
+export const findByClass = async (className) => {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM students WHERE class = ? ORDER BY name ASC',
+      [className]
+    );
+    return rows;
+  } catch (error) {
+    throw new Error(`Database error: ${error.message}`);
+  }
+};
+
+/**
+ * Get the next available roll number for a class
+ * @param {string} className - Class name
+ * @returns {Promise<number>} Next available roll number
+ */
+export const getNextRollNumber = async (className) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT student_id FROM students 
+       WHERE class = ? AND student_id REGEXP '^STUD[^0-9]*[0-9]+@sks$'
+       ORDER BY student_id DESC`,
+      [className]
+    );
+    
+    if (rows.length === 0) return 1;
+    
+    // Extract roll numbers from student IDs
+    const rollNumbers = rows
+      .map(row => {
+        const match = row.student_id.match(/STUD[^0-9]*(\d+)@sks$/);
+        return match ? parseInt(match[1], 10) : 0;
+      })
+      .filter(num => num > 0);
+    
+    return rollNumbers.length > 0 ? Math.max(...rollNumbers) + 1 : 1;
+  } catch (error) {
+    throw new Error(`Database error: ${error.message}`);
+  }
+};
+
+/**
  * Create a new student
  * @param {Object} studentData - Student data
  * @returns {Promise<Object>} Created student record
@@ -62,6 +109,8 @@ export const create = async (studentData) => {
   try {
     const {
       student_id,
+      student_password,
+      roll_no,
       name,
       email,
       phone,
@@ -88,13 +137,15 @@ export const create = async (studentData) => {
 
     const [result] = await pool.execute(
       `INSERT INTO students (
-        student_id, name, email, phone, date_of_birth, gender, address,
+        student_id, student_password, roll_no, name, email, phone, date_of_birth, gender, address,
         class, section, academic_year, admission_date, blood_group,
         father_name, mother_name, primary_contact, secondary_contact,
         aadhar_no, annual_income, parent_name, parent_phone, parent_email, photo, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         student_id,
+        student_password || null,
+        roll_no || null,
         name,
         email || null,
         phone || null,
@@ -138,6 +189,9 @@ export const create = async (studentData) => {
 export const update = async (id, studentData) => {
   try {
     const {
+      student_id,
+      student_password,
+      roll_no,
       name,
       email,
       phone,
@@ -164,7 +218,7 @@ export const update = async (id, studentData) => {
 
     await pool.execute(
       `UPDATE students SET
-        name = ?, email = ?, phone = ?, date_of_birth = ?, gender = ?,
+        student_id = ?, student_password = ?, roll_no = ?, name = ?, email = ?, phone = ?, date_of_birth = ?, gender = ?,
         address = ?, class = ?, section = ?, academic_year = ?,
         admission_date = ?, blood_group = ?, father_name = ?, mother_name = ?,
         primary_contact = ?, secondary_contact = ?, aadhar_no = ?,
@@ -172,6 +226,9 @@ export const update = async (id, studentData) => {
         parent_email = ?, photo = ?, status = ?
       WHERE id = ?`,
       [
+        student_id,
+        student_password || null,
+        roll_no || null,
         name,
         email || null,
         phone || null,
@@ -201,7 +258,7 @@ export const update = async (id, studentData) => {
     return await findById(id);
   } catch (error) {
     if (error.code === 'ER_DUP_ENTRY') {
-      throw new Error('Email already exists');
+      throw new Error('Student ID or Email already exists');
     }
     throw new Error(`Database error: ${error.message}`);
   }

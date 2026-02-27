@@ -13,7 +13,11 @@ export const findAll = async () => {
     const [rows] = await pool.execute(
       'SELECT * FROM buses ORDER BY created_at DESC'
     );
-    return rows;
+    // Parse JSON images field
+    return rows.map(row => ({
+      ...row,
+      images: row.images ? JSON.parse(row.images) : []
+    }));
   } catch (error) {
     throw new Error(`Database error: ${error.message}`);
   }
@@ -30,7 +34,12 @@ export const findById = async (id) => {
       'SELECT * FROM buses WHERE id = ?',
       [id]
     );
-    return rows.length > 0 ? rows[0] : null;
+    if (rows.length === 0) return null;
+    // Parse JSON images field
+    return {
+      ...rows[0],
+      images: rows[0].images ? JSON.parse(rows[0].images) : []
+    };
   } catch (error) {
     throw new Error(`Database error: ${error.message}`);
   }
@@ -47,7 +56,12 @@ export const findByBusNumber = async (busNumber) => {
       'SELECT * FROM buses WHERE bus_number = ?',
       [busNumber]
     );
-    return rows.length > 0 ? rows[0] : null;
+    if (rows.length === 0) return null;
+    // Parse JSON images field
+    return {
+      ...rows[0],
+      images: rows[0].images ? JSON.parse(rows[0].images) : []
+    };
   } catch (error) {
     throw new Error(`Database error: ${error.message}`);
   }
@@ -73,14 +87,20 @@ export const create = async (busData) => {
       insurance_expiry,
       fc_expiry,
       permit_expiry,
+      images,
       status = 'Active'
     } = busData;
+
+    // Convert images array to JSON string if provided
+    const imagesJson = images && Array.isArray(images) && images.length > 0 
+      ? JSON.stringify(images) 
+      : null;
 
     const [result] = await pool.execute(
       `INSERT INTO buses (
         bus_number, registration_number, chassis_number, engine_number, driver_name, driver_contact,
-        route_name, capacity, vehicle_weight, insurance_expiry, fc_expiry, permit_expiry, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        route_name, capacity, vehicle_weight, insurance_expiry, fc_expiry, permit_expiry, images, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         bus_number,
         registration_number,
@@ -94,6 +114,7 @@ export const create = async (busData) => {
         insurance_expiry || null,
         fc_expiry || null,
         permit_expiry || null,
+        imagesJson,
         status
       ]
     );
@@ -128,14 +149,20 @@ export const update = async (id, busData) => {
       insurance_expiry,
       fc_expiry,
       permit_expiry,
+      images,
       status
     } = busData;
+
+    // Convert images array to JSON string if provided
+    const imagesJson = images && Array.isArray(images) && images.length > 0 
+      ? JSON.stringify(images) 
+      : null;
 
     await pool.execute(
       `UPDATE buses SET
         bus_number = ?, registration_number = ?, chassis_number = ?, engine_number = ?,
         driver_name = ?, driver_contact = ?, route_name = ?, capacity = ?, vehicle_weight = ?,
-        insurance_expiry = ?, fc_expiry = ?, permit_expiry = ?, status = ?
+        insurance_expiry = ?, fc_expiry = ?, permit_expiry = ?, images = ?, status = ?
       WHERE id = ?`,
       [
         bus_number,
@@ -150,6 +177,7 @@ export const update = async (id, busData) => {
         insurance_expiry || null,
         fc_expiry || null,
         permit_expiry || null,
+        imagesJson,
         status,
         id
       ]
@@ -216,7 +244,11 @@ export const findBusesWithExpiringDocuments = async (months = 2) => {
         nowStr, futureStr  // permit ORDER
       ]
     );
-    return rows;
+    // Parse JSON images field
+    return rows.map(row => ({
+      ...row,
+      images: row.images ? JSON.parse(row.images) : []
+    }));
   } catch (error) {
     throw new Error(`Database error: ${error.message}`);
   }

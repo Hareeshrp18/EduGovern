@@ -1,30 +1,14 @@
 import express from 'express';
 import multer from 'multer';
-import { existsSync, mkdirSync } from 'fs';
 import path from 'path';
 import * as messageController from './message.controller.js';
 import { authenticate } from '../../middleware/auth.middleware.js';
 
 const router = express.Router();
 
-// Multer setup for attachments
-const uploadDir = path.join(process.cwd(), 'uploads', 'messages');
-if (!existsSync(uploadDir)) {
-  mkdirSync(uploadDir, { recursive: true });
-}
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `${unique}${ext}`);
-  }
-});
-
+// Multer setup for attachments (memory storage for Cloudinary)
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     const allowed = [

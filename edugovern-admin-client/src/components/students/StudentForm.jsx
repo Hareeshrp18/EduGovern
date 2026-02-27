@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import './StudentForm.css';
+import { uploadFile } from '../../services/upload.service.js';
+import { normalizeClassForCompare } from '../../utils/classCompare.js';
 
-/**
- * Student Form Component
- * Used for both adding and editing students
- * Matches the design with photo upload, two-column layout, and appropriate input/select fields
- */
-const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly = false }) => {
+
+const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly = false, classes = [], sections = [] }) => {
   const [formData, setFormData] = useState({
     student_id: '',
+    roll_no: '',
     name: '',
     date_of_birth: '',
     gender: '',
@@ -27,17 +26,45 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
 
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoPreview, setPhotoPreview] = useState(null);
-
-  // Populate form if editing or viewing
+  
   useEffect(() => {
     if (student && (isEditing || viewOnly)) {
+      const studentClass = student.class || '';
+      const resolvedClass = classes.length && studentClass
+        ? (classes.find(c => normalizeClassForCompare(c.name) === normalizeClassForCompare(studentClass))?.name ?? studentClass)
+        : studentClass;
+      
+      // Format date_of_birth - backend now sends yyyy-MM-dd format
+      let formattedDob = student.date_of_birth || '';
+      if (formattedDob) {
+        // Backend now sends dates in yyyy-MM-dd format, use directly
+        if (typeof formattedDob === 'string' && formattedDob.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // Already in correct format
+          formattedDob = formattedDob;
+        } else if (formattedDob instanceof Date) {
+          // If somehow still a Date object, format it properly
+          const year = formattedDob.getFullYear();
+          const month = String(formattedDob.getMonth() + 1).padStart(2, '0');
+          const day = String(formattedDob.getDate()).padStart(2, '0');
+          formattedDob = `${year}-${month}-${day}`;
+        } else {
+          // Handle ISO date strings by extracting just the date part
+          const isoMatch = String(formattedDob).match(/^(\d{4}-\d{2}-\d{2})/);
+          if (isoMatch) {
+            formattedDob = isoMatch[1];
+          }
+        }
+      }
+      
       setFormData({
         student_id: student.student_id || '',
+        roll_no: student.roll_no || '',
         name: student.name || '',
-        date_of_birth: student.date_of_birth || '',
+        date_of_birth: formattedDob,
         gender: student.gender || '',
-        class: student.class || '',
+        class: resolvedClass,
         section: student.section || '',
         blood_group: student.blood_group || '',
         father_name: student.father_name || '',
@@ -53,28 +80,25 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
         setPhotoPreview(student.photo);
       }
     }
-  }, [student, isEditing, viewOnly]);
-
-  // Auto-generate student_id when form opens (for new students)
-  useEffect(() => {
-    if (!isEditing && !formData.student_id) {
-      // Generate student ID: STU + timestamp + random 4 digits
-      const timestamp = Date.now().toString().slice(-6);
-      const random = Math.floor(1000 + Math.random() * 9000);
-      setFormData(prev => ({
-        ...prev,
-        student_id: `STU${timestamp}${random}`
-      }));
-    }
-  }, [isEditing]);
+  }, [student, isEditing, viewOnly, classes]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear error for this field
+    setFormData(prev => {
+      const next = { ...prev };
+      
+      // Handle date fields - keep in yyyy-MM-dd format without timezone conversion
+      if (name === 'date_of_birth' && value) {
+        // The HTML date input already provides yyyy-MM-dd format
+        // No need for timezone conversion - use the value directly
+        next[name] = value;
+      } else {
+        next[name] = value;
+      }
+      
+      if (name === 'class') next.section = '';
+      return next;
+    });
     if (errors[name]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -83,6 +107,10 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
       });
     }
   };
+
+  const sectionOptions = sections.filter(s =>
+    normalizeClassForCompare(s.class_name || '') === normalizeClassForCompare(formData.class)
+  );
 
   const handlePhotoChange = (e) => {
     const file = e.target.files[0];
@@ -101,12 +129,16 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
   const validate = () => {
     const newErrors = {};
 
-    if (!formData.student_id.trim()) {
-      newErrors.student_id = 'Student ID is required';
-    }
-
     if (!formData.name.trim()) {
       newErrors.name = 'Name is required';
+    }
+
+    if (!formData.class) {
+      newErrors.class = 'Class is required';
+    }
+
+    if (isEditing && !formData.student_id.trim()) {
+      newErrors.student_id = 'Student ID is required when updating';
     }
 
     setErrors(newErrors);
@@ -129,17 +161,30 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
     try {
       // Prepare data for submission
       const submitData = { ...formData };
-      // In production, upload photo file to server and get URL
-      // For now, we'll just send the data
+
+      // If a new photo file is selected, upload it first
       if (photoPreview && formData.photoFile) {
-        // In production: upload file and get URL
-        submitData.photo = photoPreview; // Temporary, should be server URL
+        setUploadingPhoto(true);
+        try {
+          const uploadResult = await uploadFile(formData.photoFile, 'students');
+          submitData.photo = uploadResult.url;
+        } catch (err) {
+          setErrors({ submit: err.message || 'Failed to upload photo' });
+          return;
+        } finally {
+          setUploadingPhoto(false);
+        }
+      } else if (photoPreview && !formData.photoFile) {
+        // No new file selected but a preview exists (editing existing photo)
+        submitData.photo = photoPreview;
       }
+
       await onSubmit(submitData);
     } catch (error) {
       setErrors({ submit: error.message });
     } finally {
       setLoading(false);
+      setUploadingPhoto(false);
     }
   };
 
@@ -156,23 +201,45 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
             <div className="error-message">{errors.submit}</div>
           )}
 
-          {/* Student ID Field (Auto-generated, can be edited) */}
-          {!isEditing && (
-            <div className="form-group student-id-field">
-              <label htmlFor="student_id">Student ID *</label>
-              <input
-                type="text"
-                id="student_id"
-                name="student_id"
-                value={formData.student_id}
-                onChange={handleChange}
-                placeholder="Auto-generated"
-                required
-                disabled={viewOnly}
-              />
-              {errors.student_id && <span className="error-text">{errors.student_id}</span>}
-            </div>
-          )}
+          {/* Student ID Field - Editable with validation */}
+          <div className="form-group student-id-field">
+            <label htmlFor="student_id">Student ID {isEditing && '*'}</label>
+            <input
+              type="text"
+              id="student_id"
+              name="student_id"
+              value={formData.student_id}
+              onChange={handleChange}
+              placeholder={isEditing ? "e.g., 1@sks, 2@sks" : "Auto-generated on save"}
+              required={isEditing}
+              disabled={viewOnly}
+              readOnly={!isEditing}
+            />
+            {errors.student_id && <span className="error-text">{errors.student_id}</span>}
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              {isEditing 
+                ? 'Editable - Format: number@sks (e.g., 1@sks, 2@sks). Changes will update all related records.' 
+                : 'Will be auto-generated when you save'}
+            </small>
+          </div>
+
+          {/* Roll Number Field - Always editable except in view mode */}
+          <div className="form-group roll-no-field">
+            <label htmlFor="roll_no">Roll Number</label>
+            <input
+              type="text"
+              id="roll_no"
+              name="roll_no"
+              value={formData.roll_no}
+              onChange={handleChange}
+              placeholder={isEditing ? "e.g., STUD101@sks" : "Auto-generated or enter manually"}
+              disabled={viewOnly}
+            />
+            {errors.roll_no && <span className="error-text">{errors.roll_no}</span>}
+            <small style={{ color: '#666', fontSize: '12px' }}>
+              {isEditing ? 'Editable - Format: STUD{class}{rollno}@sks' : 'Optional - Will auto-generate if left empty'}
+            </small>
+          </div>
 
           {/* Photo Upload Section */}
           <div className="photo-upload-section">
@@ -221,6 +288,40 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
               </div>
 
               <div className="form-group">
+                <label htmlFor="class">Class *</label>
+                <select
+                  id="class"
+                  name="class"
+                  value={formData.class}
+                  onChange={handleChange}
+                  required
+                  disabled={viewOnly}
+                >
+                  <option value="">Select Class</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+                {errors.class && <span className="error-text">{errors.class}</span>}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="section">Section</label>
+                <select
+                  id="section"
+                  name="section"
+                  value={formData.section}
+                  onChange={handleChange}
+                  disabled={viewOnly}
+                >
+                  <option value="">Select Section</option>
+                  {sectionOptions.map((s) => (
+                    <option key={s.id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
                 <label htmlFor="date_of_birth">Date of Birth</label>
                 <input
                   type="date"
@@ -245,49 +346,6 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Other">Other</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="class">Class</label>
-                <select
-                  id="class"
-                  name="class"
-                  value={formData.class}
-                  onChange={handleChange}
-                  disabled={viewOnly}
-                >
-                  <option value="">Select Class</option>
-                  <option value="1st">1st</option>
-                  <option value="2nd">2nd</option>
-                  <option value="3rd">3rd</option>
-                  <option value="4th">4th</option>
-                  <option value="5th">5th</option>
-                  <option value="6th">6th</option>
-                  <option value="7th">7th</option>
-                  <option value="8th">8th</option>
-                  <option value="9th">9th</option>
-                  <option value="10th">10th</option>
-                  <option value="11th">11th</option>
-                  <option value="12th">12th</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="section">Section</label>
-                <select
-                  id="section"
-                  name="section"
-                  value={formData.section}
-                  onChange={handleChange}
-                  disabled={viewOnly}
-                >
-                  <option value="">Select Section</option>
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                  <option value="D">D</option>
-                  <option value="E">E</option>
                 </select>
               </div>
 
@@ -416,8 +474,8 @@ const StudentForm = ({ student, onClose, onSubmit, isEditing = false, viewOnly =
             <button type="button" className="cancel-btn" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="submit-btn" disabled={loading}>
-              {loading ? 'Saving...' : 'Save'}
+            <button type="submit" className="submit-btn" disabled={loading || uploadingPhoto}>
+              {uploadingPhoto ? 'Uploading Photo...' : loading ? 'Saving...' : 'Save'}
             </button>
           </div>
           )}

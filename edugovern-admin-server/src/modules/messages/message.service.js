@@ -62,11 +62,11 @@ export const createMessage = async (messageData) => {
         recipient_type: originalMessage.sender_type,
         subject: originalMessage.subject ? `Re: ${originalMessage.subject}` : 'Re: Your Message',
         message: messageData.message,
-        reply_to: messageData.reply_to,
-        attachment_path: messageData.attachment_path,
-        attachment_type: messageData.attachment_type,
-        attachment_name: messageData.attachment_name,
-        attachment_size: messageData.attachment_size
+        // Attachments (if present)
+        attachment_path: messageData.attachment_path || null,
+        attachment_type: messageData.attachment_type || null,
+        attachment_name: messageData.attachment_name || null,
+        attachment_size: messageData.attachment_size || null
       };
 
       return await messageModel.create(replyData);
@@ -86,11 +86,11 @@ export const createMessage = async (messageData) => {
       recipient_type: messageData.recipient_type,
       subject: messageData.subject || null,
       message: messageData.message,
-      reply_to: null,
-      attachment_path: messageData.attachment_path,
-      attachment_type: messageData.attachment_type,
-      attachment_name: messageData.attachment_name,
-      attachment_size: messageData.attachment_size
+      // Attachments (if present)
+      attachment_path: messageData.attachment_path || null,
+      attachment_type: messageData.attachment_type || null,
+      attachment_name: messageData.attachment_name || null,
+      attachment_size: messageData.attachment_size || null
     };
 
     return await messageModel.create(newMessageData);

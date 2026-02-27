@@ -27,6 +27,7 @@ const AdminMessages = () => {
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedSenderType, setSelectedSenderType] = useState('All');
+  const [showRecentChat, setShowRecentChat] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [messageInput, setMessageInput] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -43,16 +44,23 @@ const AdminMessages = () => {
     fetchFaculty();
   }, []);
 
+  // Reset selectedSenderType if it's "other" (removed option)
+  useEffect(() => {
+    if (selectedSenderType === 'other') {
+      setSelectedSenderType('All');
+    }
+  }, [selectedSenderType]);
+
   // Group messages into conversations and create user list
   useEffect(() => {
     groupMessagesIntoConversations();
     createUserList();
-  }, [messages, students, faculty, selectedClass, selectedSection, selectedSenderType, searchTerm]);
+  }, [messages, students, faculty, selectedClass, selectedSection, selectedSenderType, searchTerm, showRecentChat]);
 
   // Combine conversations and user list for display
   useEffect(() => {
     combineConversationsAndUsers();
-  }, [conversations, userList, selectedSenderType]);
+  }, [conversations, userList, selectedSenderType, showRecentChat, selectedClass, selectedSection]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -115,73 +123,70 @@ const AdminMessages = () => {
     }
   };
 
+  const getOtherParty = (msg) => {
+    if (msg.recipient_type === 'admin') {
+      return { id: msg.sender_id, type: msg.sender_type, name: msg.sender_name };
+    }
+    return { id: msg.recipient_id, type: msg.recipient_type, name: msg.recipient_name };
+  };
+
   const groupMessagesIntoConversations = () => {
     let filtered = [...messages];
 
-    // Filter by sender type first
+    // Filter by sender/recipient type (other party in conversation)
     if (selectedSenderType !== 'All') {
-      filtered = filtered.filter(msg => msg.sender_type === selectedSenderType);
+      filtered = filtered.filter(msg => {
+        const other = getOtherParty(msg);
+        return other.type === selectedSenderType;
+      });
     }
 
-    // Filter by class and section for student messages
-    // When class/section are selected, filter student messages to match those criteria
-    // Other user types are shown if "All" is selected
-    if (selectedClass || selectedSection) {
+    // Filter by class and section for student conversations
+    if (!showRecentChat && (selectedClass || selectedSection)) {
       filtered = filtered.filter(msg => {
-        // If it's not a student message and "All" is selected, include it
-        if (msg.sender_type !== 'student') {
-          return selectedSenderType === 'All';
-        }
-        
-        // For student messages, check class and section
-        const student = students.find(s => 
-          s.student_id === msg.sender_id || 
-          s.id.toString() === msg.sender_id ||
-          s.email === msg.sender_id
+        const other = getOtherParty(msg);
+        if (other.type !== 'student') return selectedSenderType === 'All';
+        const student = students.find(s =>
+          s.student_id === other.id || s.id?.toString() === other.id || s.email === other.id
         );
-        
         if (!student) return false;
-        
-        // Apply class filter if selected
-        if (selectedClass && student.class !== selectedClass) {
-          return false;
-        }
-        
-        // Apply section filter if selected
-        if (selectedSection && student.section !== selectedSection) {
-          return false;
-        }
-        
+        if (selectedClass && student.class !== selectedClass) return false;
+        if (selectedSection && student.section !== selectedSection) return false;
         return true;
       });
     }
 
     // Filter by search term
     if (searchTerm) {
-      filtered = filtered.filter(msg =>
-        msg.sender_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        msg.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        msg.message?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(msg => {
+        const other = getOtherParty(msg);
+        return (
+          (other.name || '').toLowerCase().includes(term) ||
+          (msg.subject || '').toLowerCase().includes(term) ||
+          (msg.message || '').toLowerCase().includes(term)
+        );
+      });
     }
 
-    // Group by sender
+    // Group by other party (conversation partner)
     const conversationMap = new Map();
     filtered.forEach(msg => {
-      const key = `${msg.sender_id}_${msg.sender_type}`;
+      const other = getOtherParty(msg);
+      const key = `${other.id}_${other.type}`;
       if (!conversationMap.has(key)) {
         conversationMap.set(key, {
-          sender_id: msg.sender_id,
-          sender_name: msg.sender_name,
-          sender_type: msg.sender_type,
+          sender_id: other.id,
+          sender_name: other.name || 'Unknown',
+          sender_type: other.type,
           messages: [],
           lastMessage: null,
           unreadCount: 0,
-          studentInfo: msg.sender_type === 'student' 
-            ? students.find(s => s.student_id === msg.sender_id || s.id.toString() === msg.sender_id)
+          studentInfo: other.type === 'student'
+            ? students.find(s => s.student_id === other.id || s.id?.toString() === other.id)
             : null,
-          facultyInfo: msg.sender_type === 'staff'
-            ? faculty.find(f => f.id.toString() === msg.sender_id || f.email === msg.sender_id)
+          facultyInfo: other.type === 'staff'
+            ? faculty.find(f => f.staff_id === other.id || f.email === other.id)
             : null
         });
       }
@@ -190,12 +195,11 @@ const AdminMessages = () => {
       if (!conv.lastMessage || new Date(msg.created_at) > new Date(conv.lastMessage.created_at)) {
         conv.lastMessage = msg;
       }
-      if (!msg.is_read) {
+      if (!msg.is_read && msg.recipient_type === 'admin') {
         conv.unreadCount++;
       }
     });
 
-    // Convert to array and sort by last message date
     const convs = Array.from(conversationMap.values()).sort((a, b) => {
       const dateA = a.lastMessage ? new Date(a.lastMessage.created_at) : new Date(0);
       const dateB = b.lastMessage ? new Date(b.lastMessage.created_at) : new Date(0);
@@ -216,14 +220,17 @@ const AdminMessages = () => {
     if (selectedSenderType === 'student') {
       let filteredStudents = [...students];
 
-      // Filter by class
-      if (selectedClass) {
-        filteredStudents = filteredStudents.filter(s => s.class === selectedClass);
-      }
+      // Filter by class and section only if "Recent Chat" is not checked
+      if (!showRecentChat) {
+        // Filter by class
+        if (selectedClass) {
+          filteredStudents = filteredStudents.filter(s => s.class === selectedClass);
+        }
 
-      // Filter by section
-      if (selectedSection) {
-        filteredStudents = filteredStudents.filter(s => s.section === selectedSection);
+        // Filter by section
+        if (selectedSection) {
+          filteredStudents = filteredStudents.filter(s => s.section === selectedSection);
+        }
       }
 
       // Filter by search term
@@ -236,7 +243,7 @@ const AdminMessages = () => {
       }
 
       users = filteredStudents.map(student => ({
-        sender_id: student.student_id || student.id.toString(),
+        sender_id: student.student_id || student.id?.toString(),
         sender_name: student.name,
         sender_type: 'student',
         studentInfo: student,
@@ -247,18 +254,28 @@ const AdminMessages = () => {
     } else if (selectedSenderType === 'staff') {
       let filteredFaculty = [...faculty];
 
+      // Filter by class and section when selected (same as students)
+      if (!showRecentChat) {
+        if (selectedClass) {
+          filteredFaculty = filteredFaculty.filter(f => f.class === selectedClass);
+        }
+        if (selectedSection) {
+          filteredFaculty = filteredFaculty.filter(f => f.section === selectedSection);
+        }
+      }
+
       // Filter by search term
       if (searchTerm) {
         filteredFaculty = filteredFaculty.filter(f =>
-          f.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (f.staff_name || f.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           f.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           f.designation?.toLowerCase().includes(searchTerm.toLowerCase())
         );
       }
 
       users = filteredFaculty.map(facultyMember => ({
-        sender_id: facultyMember.id.toString(),
-        sender_name: facultyMember.name,
+        sender_id: facultyMember.staff_id,
+        sender_name: facultyMember.staff_name || facultyMember.name,
         sender_type: 'staff',
         facultyInfo: facultyMember,
         lastMessage: null,
@@ -266,11 +283,28 @@ const AdminMessages = () => {
         messages: []
       }));
     } else if (selectedSenderType === 'transport_manager') {
-      // For transport managers, we'd need to fetch them from a service
-      // For now, we'll use an empty array or you can add transport managers separately
-      users = [];
-    } else if (selectedSenderType === 'other') {
-      users = [];
+      // Transport managers: use faculty with designation containing "Transport"
+      let filteredTransport = faculty.filter(f => {
+        const des = (f.designation || '').toLowerCase();
+        return des.includes('transport') || des.includes('transport manager');
+      });
+
+      if (searchTerm) {
+        filteredTransport = filteredTransport.filter(f =>
+          (f.staff_name || f.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          f.email?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      }
+
+      users = filteredTransport.map(fm => ({
+        sender_id: fm.staff_id,
+        sender_name: fm.staff_name || fm.name,
+        sender_type: 'transport_manager',
+        facultyInfo: fm,
+        lastMessage: null,
+        unreadCount: 0,
+        messages: []
+      }));
     }
 
     setUserList(users);
@@ -283,47 +317,74 @@ const AdminMessages = () => {
       return;
     }
 
-    // Combine conversations and users
-    const combined = new Map();
-
-    // Add existing conversations
-    conversations.forEach(conv => {
-      const key = `${conv.sender_id}_${conv.sender_type}`;
-      combined.set(key, { ...conv, hasMessages: true });
-    });
-
-    // Add users (only if they don't already have conversations)
-    userList.forEach(user => {
-      const key = `${user.sender_id}_${user.sender_type}`;
-      if (!combined.has(key)) {
-        combined.set(key, { ...user, hasMessages: false });
-      }
-    });
-
-    // Convert to array and sort
-    // Users with messages first (sorted by last message), then users without messages (sorted by name)
-    const sorted = Array.from(combined.values()).sort((a, b) => {
-      if (a.hasMessages && !b.hasMessages) return -1;
-      if (!a.hasMessages && b.hasMessages) return 1;
-      
-      if (a.hasMessages && b.hasMessages) {
+    // If "Recent Chat" is checked, show only conversations
+    if (showRecentChat) {
+      // Sort conversations by last message date (most recent first)
+      const sorted = [...conversations].sort((a, b) => {
         const dateA = a.lastMessage ? new Date(a.lastMessage.created_at) : new Date(0);
         const dateB = b.lastMessage ? new Date(b.lastMessage.created_at) : new Date(0);
         return dateB - dateA;
-      }
-      
-      // Both without messages, sort by name
-      return (a.sender_name || '').localeCompare(b.sender_name || '');
-    });
+      });
+      setDisplayList(sorted);
+      return;
+    }
 
-    setDisplayList(sorted);
+    // When "Recent Chat" is NOT checked:
+    // Show ALL matching users (with or without chats) when a specific user type is selected
+    const shouldShowAllUsers =
+      selectedSenderType === 'student' ||
+      selectedSenderType === 'staff' ||
+      selectedSenderType === 'transport_manager';
+
+    if (shouldShowAllUsers) {
+      // Show all users matching filters (with or without messages) + merge with existing conversations
+      const combined = new Map();
+
+      // Add existing conversations
+      conversations.forEach(conv => {
+        const key = `${conv.sender_id}_${conv.sender_type}`;
+        combined.set(key, { ...conv, hasMessages: true });
+      });
+
+      // Add all users from the selected class/section (even without messages)
+      userList.forEach(user => {
+        const key = `${user.sender_id}_${user.sender_type}`;
+        if (!combined.has(key)) {
+          combined.set(key, { ...user, hasMessages: false });
+        }
+      });
+
+      // Sort: Users with messages first (sorted by last message), then users without messages (sorted by name)
+      const sorted = Array.from(combined.values()).sort((a, b) => {
+        if (a.hasMessages && !b.hasMessages) return -1;
+        if (!a.hasMessages && b.hasMessages) return 1;
+        
+        if (a.hasMessages && b.hasMessages) {
+          const dateA = a.lastMessage ? new Date(a.lastMessage.created_at) : new Date(0);
+          const dateB = b.lastMessage ? new Date(b.lastMessage.created_at) : new Date(0);
+          return dateB - dateA;
+        }
+        
+        // Both without messages, sort by name
+        return (a.sender_name || '').localeCompare(b.sender_name || '');
+      });
+
+      setDisplayList(sorted);
+    } else {
+      // Show only conversations (recent chats) sorted by last message
+      const sorted = [...conversations].sort((a, b) => {
+        const dateA = a.lastMessage ? new Date(a.lastMessage.created_at) : new Date(0);
+        const dateB = b.lastMessage ? new Date(b.lastMessage.created_at) : new Date(0);
+        return dateB - dateA;
+      });
+      setDisplayList(sorted);
+    }
   };
 
   const handleSelectConversation = async (conversation) => {
     try {
-      // If conversation has messages, load them
       if (conversation.messages && conversation.messages.length > 0) {
-        // Sort messages by date
+
         const sortedMessages = [...conversation.messages].sort(
           (a, b) => new Date(a.created_at) - new Date(b.created_at)
         );
@@ -362,29 +423,14 @@ const AdminMessages = () => {
     }
 
     try {
-      // Find the original message to reply to (if any)
-      const originalMessage = conversationMessages.length > 0 
-        ? conversationMessages[conversationMessages.length - 1] 
-        : null;
-      
-      if (originalMessage && !originalMessage.reply_message) {
-        // Reply to the last message in the conversation
-        await sendReply({
-          message: messageInput.trim() || '(File attachment)',
-          reply_to: originalMessage.id,
-          attachment: selectedFile || undefined
-        });
-      } else {
-        // Send new message (either first message or new message thread)
-        await sendMessage({
-          recipient_id: selectedConversation.sender_id,
-          recipient_name: selectedConversation.sender_name,
-          recipient_type: selectedConversation.sender_type,
-          subject: originalMessage?.subject || 'Message',
-          message: messageInput.trim() || '(File attachment)',
-          attachment: selectedFile || undefined
-        });
-      }
+      await sendMessage({
+        recipient_id: selectedConversation.sender_id,
+        recipient_name: selectedConversation.sender_name,
+        recipient_type: selectedConversation.sender_type,
+        subject: 'Message',
+        message: messageInput.trim() || '(File attachment)',
+        attachment: selectedFile || undefined
+      });
 
       setMessageInput('');
       setSelectedFile(null);
@@ -393,16 +439,15 @@ const AdminMessages = () => {
       }
       setError('');
       
-      // Refresh messages
       await fetchMessages();
       await fetchUnreadCount();
       
-      // Refresh conversation
       const updatedMessages = await getAllMessages();
-      const conversationMsgs = updatedMessages.filter(
-        msg => msg.sender_id === selectedConversation.sender_id && 
-               msg.sender_type === selectedConversation.sender_type
-      );
+      const conv = selectedConversation;
+      const conversationMsgs = updatedMessages.filter(msg => {
+        const other = getOtherParty(msg);
+        return other.id === conv.sender_id && other.type === conv.sender_type;
+      });
       const sorted = conversationMsgs.sort(
         (a, b) => new Date(a.created_at) - new Date(b.created_at)
       );
@@ -511,8 +556,8 @@ const AdminMessages = () => {
       <Sidebar />
       <div className="messages-page">
         <main className="messages-content">
-          <div className="messages-header">
             <h2>Chats</h2>
+          <div className="messages-header">
             {unreadCount > 0 && (
               <div className="unread-badge">
                 {unreadCount} unread
@@ -524,19 +569,19 @@ const AdminMessages = () => {
           <div className="messages-filters">
             <select
               className="filter-btn"
-              value={selectedSenderType}
+              value={selectedSenderType === 'other' ? 'All' : selectedSenderType}
               onChange={(e) => setSelectedSenderType(e.target.value)}
             >
               <option value="All">Select User</option>
               <option value="student">Students</option>
               <option value="staff">Staff</option>
               <option value="transport_manager">Transport Manager</option>
-              <option value="other">Other</option>
             </select>
             <select
               className="filter-btn"
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
+              disabled={showRecentChat}
             >
               <option value="">Select Class</option>
               <option value="1st">1st</option>
@@ -556,6 +601,7 @@ const AdminMessages = () => {
               className="filter-btn"
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
+              disabled={showRecentChat}
             >
               <option value="">Select Section</option>
               <option value="A">A</option>
@@ -571,6 +617,14 @@ const AdminMessages = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            <label className="recent-chat-checkbox">
+              <input
+                type="checkbox"
+                checked={showRecentChat}
+                onChange={(e) => setShowRecentChat(e.target.checked)}
+              />
+              <span>Recent Chat</span>
+            </label>
           </div>
 
           {error && (
@@ -658,9 +712,9 @@ const AdminMessages = () => {
                           {conv.lastMessage ? (
                             <>
                               <span className="preview-text">
-                                {conv.lastMessage.reply_message 
-                                  ? `You: ${conv.lastMessage.reply_message.substring(0, 30)}...`
-                                  : conv.lastMessage.message.substring(0, 30) + '...'}
+                                {conv.lastMessage.sender_id === 'admin'
+                                  ? `You: ${(conv.lastMessage.message || '').substring(0, 30)}${(conv.lastMessage.message || '').length > 30 ? '...' : ''}`
+                                  : `${(conv.lastMessage.message || '').substring(0, 30)}${(conv.lastMessage.message || '').length > 30 ? '...' : ''}`}
                               </span>
                               {conv.unreadCount > 0 && (
                                 <span className="unread-indicator">{conv.unreadCount}</span>
@@ -703,7 +757,7 @@ const AdminMessages = () => {
 
                   <div className="chat-messages">
                     {conversationMessages.map((msg, idx) => {
-                      const isAdmin = msg.sender_type === 'other' && msg.sender_name === 'Admin';
+                      const isAdminMessage = msg.sender_id === 'admin' || (msg.sender_type === 'other' && msg.sender_name === 'Admin');
                       const prevMsg = idx > 0 ? conversationMessages[idx - 1] : null;
                       const showDate = !prevMsg || 
                         new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
@@ -720,20 +774,14 @@ const AdminMessages = () => {
                               })}
                             </div>
                           )}
-                          <div className={`message-bubble ${isAdmin ? 'admin' : 'sender'}`}>
-                            {!isAdmin && (
+                          <div className={`message-bubble ${isAdminMessage ? 'admin' : 'sender'}`}>
+                            {!isAdminMessage && (
                               <div className="message-sender-name">{msg.sender_name}</div>
                             )}
                             <div className="message-content">
                               {msg.message}
                               {renderAttachment(msg.attachment_path, msg.attachment_name)}
                             </div>
-                            {msg.reply_message && (
-                              <div className="reply-content">
-                                <strong>Admin replied:</strong> {msg.reply_message}
-                                {renderAttachment(msg.reply_attachment_path, msg.reply_attachment_name)}
-                              </div>
-                            )}
                             <div className="message-time">{formatTime(msg.created_at)}</div>
                           </div>
                         </div>

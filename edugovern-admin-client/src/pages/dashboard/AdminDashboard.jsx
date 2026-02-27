@@ -101,7 +101,7 @@ const AdminDashboard = () => {
 
               {/* Detailed Statistics */}
               <div className="detailed-stats">
-                {/* Students Details */}
+                {/* Students and Staff detail cards hidden - do not show on dashboard
                 <div className="detail-card">
                   <h3 className="detail-card-title">
                     <span className="detail-icon"></span> Students
@@ -122,7 +122,6 @@ const AdminDashboard = () => {
                   </div>
                 </div>
 
-                {/* Faculty Details */}
                 <div className="detail-card">
                   <h3 className="detail-card-title">
                     <span className="detail-icon"></span> Staff
@@ -142,20 +141,17 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                 </div>
+                */}
 
                 {/* Transport Details */}
                 <div className="detail-card">
                   <h3 className="detail-card-title">
                     <span className="detail-icon"></span> Transport
                   </h3>
-                  <div className="detail-stats-grid">
+                  <div className="detail-stats-grid detail-stats-grid--2col">
                     <div className="detail-stat-item">
                       <span className="detail-label">Active</span>
                       <span className="detail-value active">{stats.transport?.active || 0}</span>
-                    </div>
-                    <div className="detail-stat-item">
-                      <span className="detail-label">Inactive</span>
-                      <span className="detail-value inactive">{stats.transport?.inactive || 0}</span>
                     </div>
                     <div className="detail-stat-item">
                       <span className="detail-label">Under Maintenance</span>
